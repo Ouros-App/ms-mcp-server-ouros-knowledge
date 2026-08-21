@@ -135,9 +135,7 @@ Este projeto está sob a licença MIT. Consulte o arquivo [LICENSE](LICENSE).
 ## Principais contribuidores
 
 <!-- CONTRIBUTORS:START -->
-- [@Nicolas25vlad](https://github.com/Nicolas25vlad) — 14 contribuições
-- [@Andre-Roger](https://github.com/Andre-Roger) — 1 contribuições
-- [@juwata](https://github.com/juwata) — 1 contribuições
+- [@Nicolas25vlad](https://github.com/Nicolas25vlad) 
 <!-- CONTRIBUTORS:END -->
 
 > Atualizado automaticamente semanalmente pelo workflow de metadados do README.
