@@ -9,6 +9,7 @@ from app.core.config import settings
 
 UserType = Literal["farm_owner", "company_employee", "admin"]
 VALID_USER_TYPES = {"farm_owner", "company_employee", "admin"}
+USER_NOT_FOUND = "usuário não encontrado"
 
 
 def _connect() -> psycopg.Connection:
@@ -78,7 +79,7 @@ def _resolve_user_scope(
             (user_id,),
         ).fetchone()
         if not row:
-            raise ValueError("usuário não encontrado")
+            raise ValueError(USER_NOT_FOUND)
         return dict(row), [row["farm_id"]], [row["enterprise_id"]]
 
     if user_type == "company_employee":
@@ -97,7 +98,7 @@ def _resolve_user_scope(
             (user_id,),
         ).fetchone()
         if not row:
-            raise ValueError("usuário não encontrado")
+            raise ValueError(USER_NOT_FOUND)
         farms = cursor.execute(
             "SELECT id FROM midas.farms WHERE id_enterprise = %s",
             (row["enterprise_id"],),
@@ -109,7 +110,7 @@ def _resolve_user_scope(
         (user_id,),
     ).fetchone()
     if not row:
-        raise ValueError("usuário não encontrado")
+        raise ValueError(USER_NOT_FOUND)
     return dict(row), [], []
 
 

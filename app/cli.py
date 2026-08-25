@@ -1,10 +1,9 @@
 import argparse
 import hashlib
 import json
-import re
 import uuid
 from collections.abc import Iterable
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from docx import Document as DocxDocument
 from langchain_core.documents import Document
@@ -34,7 +33,7 @@ def split_text(text: str, chunk_size: int, chunk_overlap: int) -> list[str]:
     if not 0 <= chunk_overlap < chunk_size:
         raise ValueError("chunk-overlap deve estar entre zero e chunk-size - 1")
 
-    text = re.sub(r"[ \t]+\n", "\n", text).strip()
+    text = "\n".join(line.rstrip(" \t") for line in text.splitlines()).strip()
     chunks: list[str] = []
     start = 0
     while start < len(text):
@@ -201,17 +200,139 @@ def _manifest_key_in_scope(
     paths: Iterable[Path],
 ) -> bool:
     """Check whether a manifest entry belongs to a processed path scope."""
-    source = Path(key)
-    candidate = (source if source.is_absolute() else docs_dir / source).resolve()
+    normalized_key = key.replace("\\", "/")
+    key_parts = PurePosixPath(normalized_key).parts
+    if ".." in key_parts:
+        return False
+    is_absolute = PurePosixPath(normalized_key).is_absolute() or (
+        len(normalized_key) > 2 and normalized_key[1] == ":"
+    )
+    docs_prefix = docs_dir.resolve().as_posix().rstrip("/")
+    candidate = (
+        normalized_key.rstrip("/")
+        if is_absolute
+        else f"{docs_prefix}/{normalized_key.lstrip('/')}"
+    )
     for path in paths:
-        resolved = path.expanduser().resolve()
-        if resolved.is_dir() and (
-            candidate == resolved or resolved in candidate.parents
+        resolved_path = path.expanduser().resolve()
+        resolved = resolved_path.as_posix().rstrip("/")
+        if resolved_path.is_dir() and (
+            candidate == resolved or candidate.startswith(f"{resolved}/")
         ):
             return True
         if candidate == resolved:
             return True
     return False
+
+
+def _collect_pending(
+    files: list[Path],
+    manifest_files: dict,
+    chunk_size: int,
+    chunk_overlap: int,
+    docs_dir: Path,
+) -> list[tuple[Path, str, list[Document], dict]]:
+    """Prepare files whose content or ingestion settings changed."""
+    pending: list[tuple[Path, str, list[Document], dict]] = []
+    for path in files:
+        key = manifest_key(path, docs_dir)
+        digest = file_hash(path)
+        previous = manifest_files.get(key, {})
+        changed = (
+            previous.get("sha256") != digest
+            or previous.get("collection") != settings.QDRANT_COLLECTION_NAME
+            or previous.get("embedding_model") != settings.NVIDIA_EMBEDDING_MODEL
+            or previous.get("chunk_size") != chunk_size
+            or previous.get("chunk_overlap") != chunk_overlap
+        )
+        if not changed:
+            print(f"IGNORADO sem alteração: {key}")
+            continue
+
+        documents = prepare_documents(path, chunk_size, chunk_overlap)
+        ids = [document_id(document) for document in documents]
+        record = {
+            "sha256": digest,
+            "collection": settings.QDRANT_COLLECTION_NAME,
+            "embedding_model": settings.NVIDIA_EMBEDDING_MODEL,
+            "chunk_size": chunk_size,
+            "chunk_overlap": chunk_overlap,
+            "chunk_count": len(documents),
+            "ids": ids,
+        }
+        pending.append((path, key, documents, record))
+        print(f"ALTERADO: {key} -> {len(documents)} chunks")
+    return pending
+
+
+def _qdrant_resources(
+    dry_run: bool,
+    has_work: bool,
+    has_pending: bool,
+) -> tuple[object | None, object | None]:
+    """Open Qdrant resources only when a real synchronization is needed."""
+    if dry_run or not has_work:
+        return None, None
+    status = qdrant_status()
+    if not status["exists"]:
+        raise RuntimeError(
+            f"coleção Qdrant não encontrada: {status['collection']} ({status['error']})"
+        )
+    client = get_qdrant_client()
+    return client, get_vector_store() if has_pending else None
+
+
+def _remove_stale(
+    stale_keys: list[str],
+    manifest_files: dict,
+    client: object | None,
+    dry_run: bool,
+) -> None:
+    """Delete Qdrant points and manifest records for missing source files."""
+    for key in stale_keys:
+        stale_ids = manifest_files[key].get("ids", [])
+        if dry_run:
+            print(f"REMOVERIA: {key} -> {len(stale_ids)} chunks")
+            continue
+        if stale_ids:
+            client.delete(  # type: ignore[union-attr]
+                collection_name=settings.QDRANT_COLLECTION_NAME,
+                points_selector=stale_ids,
+                wait=True,
+            )
+        del manifest_files[key]
+        print(f"REMOVIDO: {key} -> {len(stale_ids)} chunks")
+
+
+def _upload_pending(
+    pending: list[tuple[Path, str, list[Document], dict]],
+    manifest: dict,
+    manifest_path: Path,
+    batch_size: int,
+    store: object | None,
+    client: object | None,
+) -> int:
+    """Upload changed chunks and remove superseded point IDs."""
+    total = 0
+    for _path, key, documents, record in pending:
+        for start in range(0, len(documents), batch_size):
+            batch = documents[start : start + batch_size]
+            store.add_documents(  # type: ignore[union-attr]
+                batch, ids=[document_id(document) for document in batch]
+            )
+            total += len(batch)
+
+        previous_ids = set(manifest["files"].get(key, {}).get("ids", []))
+        stale_ids = sorted(previous_ids - set(record["ids"]))
+        if stale_ids:
+            client.delete(  # type: ignore[union-attr]
+                collection_name=settings.QDRANT_COLLECTION_NAME,
+                points_selector=stale_ids,
+                wait=True,
+            )
+        manifest["files"][key] = record
+        save_manifest(manifest_path, manifest)
+    return total
 
 
 def ingest(
@@ -237,65 +358,18 @@ def ingest(
         for key in manifest["files"]
         if key not in discovered_keys and _manifest_key_in_scope(key, docs_dir, paths)
     )
-    pending: list[tuple[Path, str, list[Document], dict]] = []
-    for path in files:
-        key = manifest_key(path, docs_dir)
-        digest = file_hash(path)
-        previous = manifest["files"].get(key, {})
-        changed = (
-            previous.get("sha256") != digest
-            or previous.get("collection") != settings.QDRANT_COLLECTION_NAME
-            or previous.get("embedding_model") != settings.NVIDIA_EMBEDDING_MODEL
-            or previous.get("chunk_size") != chunk_size
-            or previous.get("chunk_overlap") != chunk_overlap
-        )
-        if not changed:
-            print(f"IGNORADO sem alteração: {key}")
-            continue
-
-        documents = prepare_documents(path, chunk_size, chunk_overlap)
-        ids = [document_id(document) for document in documents]
-        record = {
-            "sha256": digest,
-            "collection": settings.QDRANT_COLLECTION_NAME,
-            "embedding_model": settings.NVIDIA_EMBEDDING_MODEL,
-            "chunk_size": chunk_size,
-            "chunk_overlap": chunk_overlap,
-            "chunk_count": len(documents),
-            "ids": ids,
-        }
-        pending.append((path, key, documents, record))
-        print(f"ALTERADO: {key} -> {len(documents)} chunks")
+    pending = _collect_pending(
+        files, manifest["files"], chunk_size, chunk_overlap, docs_dir
+    )
 
     if not files and not stale_keys:
         print("Nenhum arquivo suportado encontrado.")
         return 0
 
-    store = None
-    client = None
-    if not dry_run and (pending or stale_keys):
-        status = qdrant_status()
-        if not status["exists"]:
-            raise RuntimeError(
-                f"coleção Qdrant não encontrada: {status['collection']} ({status['error']})"
-            )
-        client = get_qdrant_client()
-        if pending:
-            store = get_vector_store()
-
-    for key in stale_keys:
-        stale_ids = manifest["files"][key].get("ids", [])
-        if dry_run:
-            print(f"REMOVERIA: {key} -> {len(stale_ids)} chunks")
-            continue
-        if stale_ids:
-            client.delete(
-                collection_name=settings.QDRANT_COLLECTION_NAME,
-                points_selector=stale_ids,
-                wait=True,
-            )
-        del manifest["files"][key]
-        print(f"REMOVIDO: {key} -> {len(stale_ids)} chunks")
+    client, store = _qdrant_resources(
+        dry_run, bool(pending or stale_keys), bool(pending)
+    )
+    _remove_stale(stale_keys, manifest["files"], client, dry_run)
 
     if stale_keys and not dry_run:
         save_manifest(manifest_path, manifest)
@@ -304,27 +378,13 @@ def ingest(
         print("Nenhuma alteração para enviar.")
         return 0
 
-    total = 0
-    for path, key, documents, record in pending:
-        if dry_run:
-            continue
-        for start in range(0, len(documents), batch_size):
-            batch = documents[start : start + batch_size]
-            store.add_documents(
-                batch, ids=[document_id(document) for document in batch]
-            )
-            total += len(batch)
-
-        previous_ids = set(manifest["files"].get(key, {}).get("ids", []))
-        stale_ids = sorted(previous_ids - set(record["ids"]))
-        if stale_ids:
-            client.delete(
-                collection_name=settings.QDRANT_COLLECTION_NAME,
-                points_selector=stale_ids,
-                wait=True,
-            )
-        manifest["files"][key] = record
-        save_manifest(manifest_path, manifest)
+    total = (
+        0
+        if dry_run
+        else _upload_pending(
+            pending, manifest, manifest_path, batch_size, store, client
+        )
+    )
 
     if dry_run:
         print("Dry-run concluído; nada foi enviado ao Qdrant.")

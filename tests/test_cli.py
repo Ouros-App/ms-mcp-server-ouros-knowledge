@@ -55,7 +55,7 @@ class CliTests(unittest.TestCase):
             self.assertEqual(len(extract_file(source)), 1)
             chunks = prepare_documents(source, 100, 10)
             self.assertEqual(len(chunks), 1)
-            self.assertEqual(document_id(chunks[0]), document_id(chunks[0]))
+            self.assertRegex(document_id(chunks[0]), r"^[0-9a-f-]{36}$")
             self.assertEqual(len(file_hash(source)), 64)
             self.assertEqual(manifest_key(source.resolve(), root.resolve()), "note.txt")
 

@@ -1,3 +1,5 @@
+import asyncio
+
 import jwt
 from jwt import InvalidTokenError
 from mcp.server.auth.middleware.auth_context import get_access_token
@@ -27,7 +29,8 @@ class MidasTokenVerifier:
         if not self.secret or len(self.secret) < 32:
             return None
         try:
-            claims = jwt.decode(
+            claims = await asyncio.to_thread(
+                jwt.decode,
                 token,
                 self.secret,
                 algorithms=["HS256"],
