@@ -134,6 +134,7 @@ class CliTests(unittest.TestCase):
                     "files": {
                         str(stale): {
                             "ids": ["stale-point"],
+                            "collection": "old_collection",
                         }
                     }
                 },
@@ -151,7 +152,45 @@ class CliTests(unittest.TestCase):
 
             self.assertEqual(len(store.added), 1)
             self.assertEqual(client.deleted[0]["points_selector"], ["stale-point"])
+            self.assertEqual(client.deleted[0]["collection_name"], "old_collection")
             self.assertNotIn(str(stale), load_manifest(manifest_path)["files"])
+
+    @patch(
+        "app.cli.qdrant_status",
+        return_value={"exists": True, "collection": "test_collection"},
+    )
+    def test_ingest_cleans_all_ids_from_previous_collection(self, _status) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "guide.md"
+            source.write_text("guide content", encoding="utf-8")
+            manifest_path = root / MANIFEST_NAME
+            save_manifest(
+                manifest_path,
+                {
+                    "files": {
+                        str(source.resolve()): {
+                            "sha256": "old-hash",
+                            "collection": "old_collection",
+                            "embedding_model": "old-model",
+                            "ids": ["old-point"],
+                        }
+                    }
+                },
+                root,
+            )
+            client = FakeQdrantClient()
+            store = FakeVectorStore()
+            with (
+                patch("app.cli.settings.QDRANT_COLLECTION_NAME", "test_collection"),
+                patch("app.cli.settings.NVIDIA_EMBEDDING_MODEL", "test-model"),
+                patch("app.cli.get_qdrant_client", return_value=client),
+                patch("app.cli.get_vector_store", return_value=store),
+            ):
+                self.assertIsNone(ingest([root], 20, 2, 2, False, manifest_path))
+
+            self.assertEqual(client.deleted[0]["collection_name"], "old_collection")
+            self.assertEqual(client.deleted[0]["points_selector"], ["old-point"])
 
     def test_parser_accepts_ingest_options(self) -> None:
         args = build_parser().parse_args(["ingest", "docs", "--dry-run"])

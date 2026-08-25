@@ -306,13 +306,15 @@ def _remove_stale(
 ) -> None:
     """Delete Qdrant points and manifest records for missing source files."""
     for key in stale_keys:
-        stale_ids = manifest_files[key].get("ids", [])
+        previous = manifest_files[key]
+        stale_ids = previous.get("ids", [])
+        collection = previous.get("collection", settings.QDRANT_COLLECTION_NAME)
         if dry_run:
             print(f"REMOVERIA: {key} -> {len(stale_ids)} chunks")
             continue
         if stale_ids:
             client.delete(  # type: ignore[union-attr]
-                collection_name=settings.QDRANT_COLLECTION_NAME,
+                collection_name=collection,
                 points_selector=stale_ids,
                 wait=True,
             )
@@ -339,11 +341,19 @@ def _upload_pending(
             )
             total += len(batch)
 
-        previous_ids = set(manifest["files"].get(key, {}).get("ids", []))
-        stale_ids = sorted(previous_ids - set(record["ids"]))
+        previous = manifest["files"].get(key, {})
+        previous_ids = set(previous.get("ids", []))
+        previous_collection = previous.get(
+            "collection", settings.QDRANT_COLLECTION_NAME
+        )
+        stale_ids = (
+            sorted(previous_ids)
+            if previous_collection != settings.QDRANT_COLLECTION_NAME
+            else sorted(previous_ids - set(record["ids"]))
+        )
         if stale_ids:
             client.delete(  # type: ignore[union-attr]
-                collection_name=settings.QDRANT_COLLECTION_NAME,
+                collection_name=previous_collection,
                 points_selector=stale_ids,
                 wait=True,
             )
