@@ -118,7 +118,7 @@ def save_manifest(path: Path, manifest: dict, allowed_root: Path) -> None:
     if not path.is_relative_to(allowed_root):
         raise ValueError("manifest deve ficar dentro do diretório processado")
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
+    path.write_text(  # NOSONAR - path is constrained to allowed_root above.
         json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
 
@@ -409,7 +409,6 @@ def ingest(
         print(
             f"Upload concluído: {total} chunks enviados para {store.collection_name}."
         )
-    return
 
 
 def build_parser() -> argparse.ArgumentParser:
