@@ -41,15 +41,15 @@ class McpTests(unittest.TestCase):
     @patch("app.mcp_server.get_database_user_context", return_value={"profile": {}})
     @patch("app.mcp_server.get_authenticated_identity", return_value=("farm_owner", 42))
     def test_user_context_uses_token_identity(self, identity, context) -> None:
-        self.assertEqual(get_user_context(), {"profile": {}})
-        identity.assert_called_once_with()
+        self.assertEqual(get_user_context("farm_owner", 42), {"profile": {}})
+        identity.assert_called_once_with("farm_owner", 42)
         context.assert_called_once_with("farm_owner", 42)
 
     @patch("app.mcp_server.get_database_user_farm_data", return_value={"data": {}})
     @patch("app.mcp_server.get_authenticated_identity", return_value=("farm_owner", 42))
     def test_user_farm_data_uses_token_identity(self, identity, farm_data) -> None:
-        self.assertEqual(get_user_farm_data(5), {"data": {}})
-        identity.assert_called_once_with()
+        self.assertEqual(get_user_farm_data("farm_owner", 42, 5), {"data": {}})
+        identity.assert_called_once_with("farm_owner", 42)
         farm_data.assert_called_once_with("farm_owner", 42, 5)
 
 

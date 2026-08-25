@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Literal
 
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.fastmcp import FastMCP
@@ -59,19 +59,23 @@ def postgres_status() -> dict[str, Any]:
 
 
 @mcp.tool()
-def get_user_context() -> dict[str, Any]:
+def get_user_context(
+    user_type: Literal["farm_owner", "company_employee", "admin"], user_id: int
+) -> dict[str, Any]:
     """Load a user's profile and linked farms for personalized answers.
 
-    The identity is derived from the verified MCP access token.
+    The identity is validated after the shared MCP token authenticates the client.
     """
-    user_type, user_id = get_authenticated_identity()
+    user_type, user_id = get_authenticated_identity(user_type, user_id)
     return get_database_user_context(user_type, user_id)
 
 
 @mcp.tool()
 def get_user_farm_data(
+    user_type: Literal["farm_owner", "company_employee", "admin"],
+    user_id: int,
     limit: int = 20,
 ) -> dict[str, Any]:
     """Load bounded goals, consumption, lots, and tips for the user's farms."""
-    user_type, user_id = get_authenticated_identity()
+    user_type, user_id = get_authenticated_identity(user_type, user_id)
     return get_database_user_farm_data(user_type, user_id, limit)

@@ -13,7 +13,7 @@ Servidor FastAPI com transporte MCP via Streamable HTTP para consultar uma cole�
 - Ferramenta MCP `search_knowledge(query, limit)` para busca semântica.
 - Ferramenta MCP `qdrant_status()` para verificar a coleção configurada.
 - Ferramenta MCP `postgres_status()` para verificar a conexão somente leitura do MIDAS.
-- Ferramentas MCP `get_user_context()` e `get_user_farm_data(limit)` para contexto personalizado por usuário autenticado.
+- Ferramentas MCP `get_user_context(user_type, user_id)` e `get_user_farm_data(user_type, user_id, limit)` para contexto personalizado por usuário.
 - CLI `ingest` para extrair, dividir, embeddar e enviar arquivos ao Qdrant.
 - `QdrantVectorStore` e `NVIDIAEmbeddings` da stack LangChain.
 - `.env` local ignorado pelo Git e `.env.example` como modelo de configuração.
@@ -32,8 +32,6 @@ NVIDIA_EMBEDDING_MODEL=nvidia/llama-nemotron-embed-1b-v2
 MIDAS_DATABASE_URL=postgresql://midas_ro:senha@host-neon/segundo_prod?sslmode=require&channel_binding=require
 MIDAS_DB_CONNECT_TIMEOUT=10
 MCP_AUTH_TOKEN=gere-um-token-secreto-com-pelo-menos-32-caracteres
-MCP_USER_TYPE=farm_owner
-MCP_USER_ID=42
 MCP_RESOURCE_URL=http://localhost:8000/mcp
 ```
 
@@ -41,7 +39,7 @@ O mesmo modelo de embedding precisa ter sido usado para gravar os vetores na col
 
 `MIDAS_DATABASE_URL` deve usar a role `midas_ro` criada pela migration. A role acessa as views do schema `midas`, sem as colunas de senha, e não recebe uma ferramenta de SQL arbitrário. A senha real deve ficar somente no `.env`/secret manager.
 
-O endpoint MCP exige o token fixo de `MCP_AUTH_TOKEN` no header `Authorization: Bearer <token>`. Use um valor aleatório com pelo menos 32 caracteres e mantenha-o somente no `.env`/secret manager. `MCP_USER_TYPE` e `MCP_USER_ID` definem a identidade MIDAS fixa usada pelas tools personalizadas; o token não deve ser enviado pelo modelo.
+O endpoint MCP exige o token fixo de `MCP_AUTH_TOKEN` no header `Authorization: Bearer <token>`. Use um valor aleatório com pelo menos 32 caracteres e mantenha-o somente no `.env`/secret manager. A identidade MIDAS (`user_type` e `user_id`) é enviada em cada chamada das tools e validada pelo servidor.
 
 ## Execução local
 
@@ -102,7 +100,7 @@ O CLI mantém `docs/.qdrant-manifest.json` com o SHA-256, modelo, coleção, par
 
 ## Autenticação MCP
 
-Envie o mesmo valor configurado em `MCP_AUTH_TOKEN` como `Authorization: Bearer <token>` nas chamadas MCP. Como esse modelo usa um token compartilhado, ele representa uma única identidade MIDAS configurada por `MCP_USER_TYPE` e `MCP_USER_ID`; para múltiplos usuários simultâneos, será necessário voltar a usar tokens com identidade individual.
+Envie o mesmo valor configurado em `MCP_AUTH_TOKEN` como `Authorization: Bearer <token>` nas chamadas MCP. O token compartilhado autentica o cliente, enquanto `user_type` e `user_id` identificam o usuário consultado. Qualquer cliente que possua esse token pode solicitar outra identidade; para clientes não confiáveis, use tokens individuais com identidade embutida.
 
 ## Estrutura
 
