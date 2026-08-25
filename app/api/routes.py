@@ -7,7 +7,7 @@ router = APIRouter()
 
 @router.get("/", response_model=MessageResponse)
 def read_root() -> MessageResponse:
-    return MessageResponse(message="FastAPI microservice is running")
+    return MessageResponse(message="Ouros Knowledge MCP is running")
 
 
 @router.get("/health", response_model=HealthResponse)
