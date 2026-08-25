@@ -111,8 +111,12 @@ def load_manifest(path: Path) -> dict:
     return manifest
 
 
-def save_manifest(path: Path, manifest: dict) -> None:
+def save_manifest(path: Path, manifest: dict, allowed_root: Path) -> None:
     """Persist an ingestion manifest as UTF-8 JSON."""
+    path = path.expanduser().resolve()
+    allowed_root = allowed_root.expanduser().resolve()
+    if not path.is_relative_to(allowed_root):
+        raise ValueError("manifest deve ficar dentro do diretório processado")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
@@ -225,6 +229,18 @@ def _manifest_key_in_scope(
     return False
 
 
+def _manifest_location(path: Path, paths: Iterable[Path]) -> tuple[Path, Path]:
+    """Validate a manifest location and return it with its trusted root."""
+    resolved = path.expanduser().resolve()
+    for source in paths:
+        root = source.expanduser().resolve()
+        if root.is_file():
+            root = root.parent
+        if resolved == root or root in resolved.parents:
+            return resolved, root
+    raise ValueError("manifest deve ficar dentro do diretório processado")
+
+
 def _collect_pending(
     files: list[Path],
     manifest_files: dict,
@@ -311,6 +327,7 @@ def _upload_pending(
     batch_size: int,
     store: object | None,
     client: object | None,
+    manifest_root: Path,
 ) -> int:
     """Upload changed chunks and remove superseded point IDs."""
     total = 0
@@ -331,7 +348,7 @@ def _upload_pending(
                 wait=True,
             )
         manifest["files"][key] = record
-        save_manifest(manifest_path, manifest)
+        save_manifest(manifest_path, manifest, manifest_root)
     return total
 
 
@@ -342,10 +359,10 @@ def ingest(
     batch_size: int,
     dry_run: bool,
     manifest_path: Path,
-) -> int:
+) -> None:
     """Synchronize changed and removed documents with the Qdrant collection."""
     docs_dir = DEFAULT_DOCS_DIR.resolve()
-    manifest_path = manifest_path.expanduser().resolve()
+    manifest_path, manifest_root = _manifest_location(manifest_path, paths)
     files = discover_files(paths, excluded_paths=[manifest_path])
     manifest = load_manifest(manifest_path)
     manifest["collection"] = settings.QDRANT_COLLECTION_NAME
@@ -364,7 +381,7 @@ def ingest(
 
     if not files and not stale_keys:
         print("Nenhum arquivo suportado encontrado.")
-        return 0
+        return
 
     client, store = _qdrant_resources(
         dry_run, bool(pending or stale_keys), bool(pending)
@@ -372,17 +389,17 @@ def ingest(
     _remove_stale(stale_keys, manifest["files"], client, dry_run)
 
     if stale_keys and not dry_run:
-        save_manifest(manifest_path, manifest)
+        save_manifest(manifest_path, manifest, manifest_root)
 
     if not pending:
         print("Nenhuma alteração para enviar.")
-        return 0
+        return
 
     total = (
         0
         if dry_run
         else _upload_pending(
-            pending, manifest, manifest_path, batch_size, store, client
+            pending, manifest, manifest_path, batch_size, store, client, manifest_root
         )
     )
 
@@ -392,7 +409,7 @@ def ingest(
         print(
             f"Upload concluído: {total} chunks enviados para {store.collection_name}."
         )
-    return 0
+    return
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -424,7 +441,7 @@ def main() -> int:
         if args.batch_size <= 0:
             raise SystemExit("batch-size deve ser maior que zero")
         try:
-            return ingest(
+            ingest(
                 args.paths or [DEFAULT_DOCS_DIR],
                 args.chunk_size,
                 args.chunk_overlap,
@@ -432,6 +449,7 @@ def main() -> int:
                 args.dry_run,
                 args.manifest,
             )
+            return 0
         except (FileNotFoundError, TypeError, ValueError, RuntimeError) as error:
             raise SystemExit(f"Erro: {error}") from error
     return 1

@@ -76,8 +76,12 @@ class CliTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "manifest.json"
             manifest = {"version": 1, "files": {"a.txt": {"ids": ["1"]}}}
-            save_manifest(path, manifest)
+            save_manifest(path, manifest, Path(directory))
             self.assertEqual(load_manifest(path), manifest)
+            with self.assertRaises(ValueError):
+                save_manifest(
+                    Path(directory).parent / "outside.json", manifest, Path(directory)
+                )
             path.write_text("{", encoding="utf-8")
             with self.assertRaises(RuntimeError):
                 load_manifest(path)
@@ -104,13 +108,14 @@ class CliTests(unittest.TestCase):
                         }
                     }
                 },
+                root,
             )
 
             with (
                 patch("app.cli.settings.QDRANT_COLLECTION_NAME", "test_collection"),
                 patch("app.cli.settings.NVIDIA_EMBEDDING_MODEL", "test-model"),
             ):
-                self.assertEqual(ingest([root], 20, 2, 2, True, manifest_path), 0)
+                self.assertIsNone(ingest([root], 20, 2, 2, True, manifest_path))
 
     @patch(
         "app.cli.qdrant_status",
@@ -132,6 +137,7 @@ class CliTests(unittest.TestCase):
                         }
                     }
                 },
+                root,
             )
             client = FakeQdrantClient()
             store = FakeVectorStore()
@@ -141,7 +147,7 @@ class CliTests(unittest.TestCase):
                 patch("app.cli.get_qdrant_client", return_value=client),
                 patch("app.cli.get_vector_store", return_value=store),
             ):
-                self.assertEqual(ingest([root], 20, 2, 2, False, manifest_path), 0)
+                self.assertIsNone(ingest([root], 20, 2, 2, False, manifest_path))
 
             self.assertEqual(len(store.added), 1)
             self.assertEqual(client.deleted[0]["points_selector"], ["stale-point"])
