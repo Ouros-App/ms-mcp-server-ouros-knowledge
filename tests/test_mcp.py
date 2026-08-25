@@ -17,6 +17,10 @@ class McpTests(unittest.TestCase):
         self.assertEqual(read_root().message, "Ouros Knowledge MCP is running")
         self.assertEqual(health_check().status, "ok")
         self.assertIsNotNone(app)
+        schema = app.openapi()
+        self.assertEqual(schema["info"]["title"], "Ouros Knowledge MCP")
+        self.assertIn("/health", schema["paths"])
+        self.assertEqual(schema["paths"]["/health"]["get"]["tags"], ["Operação"])
 
     def test_search_validates_query_and_limit(self) -> None:
         with self.assertRaises(ValueError):

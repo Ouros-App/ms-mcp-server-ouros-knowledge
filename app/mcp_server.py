@@ -38,7 +38,12 @@ mcp = FastMCP(
 def search_knowledge(
     query: str, limit: int = settings.SEARCH_TOP_K
 ) -> list[dict[str, Any]]:
-    """Search the configured Qdrant knowledge collection using NVIDIA embeddings."""
+    """Search Qdrant using NVIDIA embeddings.
+
+    Args:
+        query: Natural-language question or search phrase.
+        limit: Number of matches to return, from 1 to 20.
+    """
     if not query.strip():
         raise ValueError("query não pode ser vazio")
     if not 1 <= limit <= 20:
@@ -64,6 +69,10 @@ def get_user_context(
 ) -> dict[str, Any]:
     """Load a user's profile and linked farms for personalized answers.
 
+    Args:
+        user_type: `farm_owner`, `company_employee`, or `admin`.
+        user_id: Positive MIDAS user ID to scope the database queries.
+
     The identity is validated after the shared MCP token authenticates the client.
     """
     user_type, user_id = get_authenticated_identity(user_type, user_id)
@@ -76,6 +85,12 @@ def get_user_farm_data(
     user_id: int,
     limit: int = 20,
 ) -> dict[str, Any]:
-    """Load bounded goals, consumption, lots, and tips for the user's farms."""
+    """Load bounded farm data for the requested MIDAS user.
+
+    Args:
+        user_type: `farm_owner`, `company_employee`, or `admin`.
+        user_id: Positive MIDAS user ID to scope the database queries.
+        limit: Maximum number of records per data group, from 1 to 100.
+    """
     user_type, user_id = get_authenticated_identity(user_type, user_id)
     return get_database_user_farm_data(user_type, user_id, limit)

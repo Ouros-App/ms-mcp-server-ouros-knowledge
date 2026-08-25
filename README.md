@@ -59,8 +59,13 @@ uvicorn app.main:app --reload --port 8000
 URLs:
 
 - API: `http://localhost:8000`
-- Swagger: `http://localhost:8000/docs`
+- Swagger/OpenAPI: `http://localhost:8000/docs`
+- ReDoc: `http://localhost:8000/redoc`
 - MCP: `http://localhost:8000/mcp/`
+
+O Swagger documenta `GET /` e `GET /health`. O endpoint MCP é um transporte
+Streamable HTTP montado em `/mcp/`, então suas tools aparecem e são descritas
+no handshake/listagem do cliente MCP, não como operações REST no Swagger.
 
 ## Docker
 
@@ -101,6 +106,37 @@ O CLI mantém `docs/.qdrant-manifest.json` com o SHA-256, modelo, coleção, par
 ## Autenticação MCP
 
 Envie o mesmo valor configurado em `MCP_AUTH_TOKEN` como `Authorization: Bearer <token>` nas chamadas MCP. O token compartilhado autentica o cliente, enquanto `user_type` e `user_id` identificam o usuário consultado. Qualquer cliente que possua esse token pode solicitar outra identidade; para clientes não confiáveis, use tokens individuais com identidade embutida.
+
+Tools disponíveis:
+
+- `search_knowledge(query, limit=5)`: busca semântica no Qdrant; `limit` entre 1 e 20.
+- `qdrant_status()`: verifica a coleção Qdrant sem chamar a NVIDIA.
+- `postgres_status()`: verifica a conexão PostgreSQL somente leitura do MIDAS.
+- `get_user_context(user_type, user_id)`: retorna perfil, empresas e farms do usuário.
+- `get_user_farm_data(user_type, user_id, limit=20)`: retorna farms, metas, consumos, lotes e dicas; `limit` entre 1 e 100.
+
+Os valores aceitos para `user_type` são `farm_owner`, `company_employee` e `admin`. Exemplos de argumentos para um cliente MCP:
+
+```json
+{
+  "name": "get_user_context",
+  "arguments": {
+    "user_type": "farm_owner",
+    "user_id": 42
+  }
+}
+```
+
+```json
+{
+  "name": "get_user_farm_data",
+  "arguments": {
+    "user_type": "farm_owner",
+    "user_id": 42,
+    "limit": 20
+  }
+}
+```
 
 ## Estrutura
 
