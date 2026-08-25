@@ -1,8 +1,10 @@
-from typing import Any, Literal
+from typing import Any
 
+from mcp.server.auth.settings import AuthSettings
 from mcp.server.fastmcp import FastMCP
 
 from app.core.config import settings
+from app.services.auth import MidasTokenVerifier, get_authenticated_identity
 from app.services.database import (
     get_user_context as get_database_user_context,
 )
@@ -24,6 +26,11 @@ mcp = FastMCP(
     stateless_http=True,
     json_response=True,
     streamable_http_path="/",
+    auth=AuthSettings(
+        issuer_url=settings.MCP_JWT_ISSUER_URL,
+        resource_server_url=settings.MCP_RESOURCE_URL,
+    ),
+    token_verifier=MidasTokenVerifier(),
 )
 
 
@@ -52,23 +59,19 @@ def postgres_status() -> dict[str, Any]:
 
 
 @mcp.tool()
-def get_user_context(
-    user_type: Literal["farm_owner", "company_employee", "admin"],
-    user_id: int,
-) -> dict[str, Any]:
+def get_user_context() -> dict[str, Any]:
     """Load a user's profile and linked farms for personalized answers.
 
-    The application should derive user_type and user_id from its authenticated
-    session instead of letting the model choose another user's identity.
+    The identity is derived from the verified MCP access token.
     """
+    user_type, user_id = get_authenticated_identity()
     return get_database_user_context(user_type, user_id)
 
 
 @mcp.tool()
 def get_user_farm_data(
-    user_type: Literal["farm_owner", "company_employee", "admin"],
-    user_id: int,
     limit: int = 20,
 ) -> dict[str, Any]:
     """Load bounded goals, consumption, lots, and tips for the user's farms."""
+    user_type, user_id = get_authenticated_identity()
     return get_database_user_farm_data(user_type, user_id, limit)

@@ -9,6 +9,7 @@ from app.core.config import settings
 
 
 def _require_nvidia_key() -> str:
+    """Return the configured NVIDIA API key or fail clearly."""
     if not settings.NVIDIA_API_KEY:
         raise RuntimeError("NVIDIA_API_KEY não está configurada no .env")
     return settings.NVIDIA_API_KEY
@@ -16,6 +17,7 @@ def _require_nvidia_key() -> str:
 
 @lru_cache(maxsize=1)
 def get_qdrant_client() -> QdrantClient:
+    """Create and cache the configured Qdrant client."""
     return QdrantClient(
         url=settings.QDRANT_URL,
         api_key=settings.QDRANT_API_KEY or None,
@@ -24,6 +26,7 @@ def get_qdrant_client() -> QdrantClient:
 
 @lru_cache(maxsize=1)
 def get_vector_store() -> QdrantVectorStore:
+    """Create and cache the configured LangChain vector store."""
     embeddings = NVIDIAEmbeddings(
         model=settings.NVIDIA_EMBEDDING_MODEL,
         nvidia_api_key=_require_nvidia_key(),
@@ -37,6 +40,7 @@ def get_vector_store() -> QdrantVectorStore:
 
 
 def search_knowledge(query: str, limit: int) -> list[dict[str, Any]]:
+    """Search Qdrant and return scored document matches."""
     documents = get_vector_store().similarity_search_with_score(query, k=limit)
     return [
         {
@@ -49,6 +53,7 @@ def search_knowledge(query: str, limit: int) -> list[dict[str, Any]]:
 
 
 def qdrant_status() -> dict[str, Any]:
+    """Report whether the configured Qdrant collection is reachable."""
     try:
         get_qdrant_client().get_collection(settings.QDRANT_COLLECTION_NAME)
         return {

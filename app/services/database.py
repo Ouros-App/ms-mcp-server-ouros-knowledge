@@ -12,6 +12,7 @@ VALID_USER_TYPES = {"farm_owner", "company_employee", "admin"}
 
 
 def _connect() -> psycopg.Connection:
+    """Open a PostgreSQL connection using the configured read-only URL."""
     if not settings.MIDAS_DATABASE_URL:
         raise RuntimeError("MIDAS_DATABASE_URL não está configurada no .env")
     return psycopg.connect(
@@ -22,6 +23,7 @@ def _connect() -> psycopg.Connection:
 
 
 def _json_safe(value: Any) -> Any:
+    """Convert PostgreSQL values into JSON-compatible primitives."""
     if isinstance(value, (datetime, date, time)):
         return value.isoformat()
     if isinstance(value, Decimal):
@@ -34,10 +36,12 @@ def _json_safe(value: Any) -> Any:
 
 
 def _rows(cursor: Any) -> list[dict[str, Any]]:
+    """Fetch cursor rows as sanitized dictionaries."""
     return [_json_safe(dict(row)) for row in cursor.fetchall()]
 
 
 def _validate_user(user_type: str, user_id: int) -> None:
+    """Validate the supported user identity shape."""
     if user_type not in VALID_USER_TYPES:
         raise ValueError("user_type deve ser farm_owner, company_employee ou admin")
     if user_id <= 0:
@@ -45,6 +49,7 @@ def _validate_user(user_type: str, user_id: int) -> None:
 
 
 def _validate_limit(limit: int) -> None:
+    """Validate the maximum number of records returned per collection."""
     if not 1 <= limit <= 100:
         raise ValueError("limit deve estar entre 1 e 100")
 
@@ -54,6 +59,7 @@ def _resolve_user_scope(
     user_type: UserType,
     user_id: int,
 ) -> tuple[dict[str, Any], list[int], list[int]]:
+    """Resolve a user and the farms and enterprises they may access."""
     if user_type == "farm_owner":
         row = cursor.execute(
             """

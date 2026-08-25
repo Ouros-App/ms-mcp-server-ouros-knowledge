@@ -13,7 +13,7 @@ Servidor FastAPI com transporte MCP via Streamable HTTP para consultar uma cole�
 - Ferramenta MCP `search_knowledge(query, limit)` para busca semântica.
 - Ferramenta MCP `qdrant_status()` para verificar a coleção configurada.
 - Ferramenta MCP `postgres_status()` para verificar a conexão somente leitura do MIDAS.
-- Ferramentas MCP `get_user_context(...)` e `get_user_farm_data(...)` para contexto personalizado por usuário.
+- Ferramentas MCP `get_user_context()` e `get_user_farm_data(limit)` para contexto personalizado por usuário autenticado.
 - CLI `ingest` para extrair, dividir, embeddar e enviar arquivos ao Qdrant.
 - `QdrantVectorStore` e `NVIDIAEmbeddings` da stack LangChain.
 - `.env` local ignorado pelo Git e `.env.example` como modelo de configuração.
@@ -31,11 +31,16 @@ NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1
 NVIDIA_EMBEDDING_MODEL=nvidia/llama-nemotron-embed-1b-v2
 MIDAS_DATABASE_URL=postgresql://midas_ro:senha@host-neon/segundo_prod?sslmode=require&channel_binding=require
 MIDAS_DB_CONNECT_TIMEOUT=10
+MCP_JWT_SECRET=gere-um-segredo-com-pelo-menos-32-caracteres
+MCP_JWT_ISSUER_URL=https://auth.ouros.local
+MCP_RESOURCE_URL=http://localhost:8000/mcp
 ```
 
 O mesmo modelo de embedding precisa ter sido usado para gravar os vetores na coleção Qdrant. A coleção também precisa existir antes da busca; a ferramenta `qdrant_status` mostra essa condição sem chamar a NVIDIA.
 
 `MIDAS_DATABASE_URL` deve usar a role `midas_ro` criada pela migration. A role acessa as views do schema `midas`, sem as colunas de senha, e não recebe uma ferramenta de SQL arbitrário. A senha real deve ficar somente no `.env`/secret manager.
+
+O endpoint MCP exige um JWT HS256 no header `Authorization: Bearer <token>`. O token precisa ser assinado com `MCP_JWT_SECRET` e conter `sub`, `user_type`, `iss`, `aud` e `exp`. `user_type` aceita `farm_owner`, `company_employee` ou `admin`; o `sub` é o ID do usuário. As tools derivam a identidade desses claims e não aceitam `user_id` enviado pelo modelo.
 
 ## Execução local
 
@@ -46,7 +51,7 @@ python -m venv .venv
 source .venv/bin/activate
 
 # Windows PowerShell
-.venv\\Scripts\\Activate.ps1
+.\.venv\Scripts\Activate.ps1
 
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
@@ -56,7 +61,7 @@ URLs:
 
 - API: `http://localhost:8000`
 - Swagger: `http://localhost:8000/docs`
-- MCP: `http://localhost:8000/mcp`
+- MCP: `http://localhost:8000/mcp/`
 
 ## Docker
 
@@ -92,11 +97,11 @@ python -m app.cli ingest \
   --batch-size 32
 ```
 
-O CLI mantém `docs/.qdrant-manifest.json` com o SHA-256, modelo, coleção e IDs dos chunks. Em execuções seguintes, arquivos sem alteração são ignorados; documentos modificados são reprocessados e os chunks antigos que sobraram são removidos. Arquivos apagados do disco não são removidos automaticamente do Qdrant nesta versão. O mesmo modelo configurado no servidor (`NVIDIA_EMBEDDING_MODEL`) é usado no upload. PDFs escaneados sem camada de texto precisam de OCR, que ainda não está incluído.
+O CLI mantém `docs/.qdrant-manifest.json` com o SHA-256, modelo, coleção, parâmetros de chunking e IDs dos chunks. Em execuções seguintes, arquivos sem alteração e com os mesmos parâmetros são ignorados; documentos modificados, renomeados ou removidos dentro dos diretórios processados são reconciliados no Qdrant. O mesmo modelo configurado no servidor (`NVIDIA_EMBEDDING_MODEL`) é usado no upload. PDFs escaneados sem camada de texto precisam de OCR, que ainda não está incluído.
 
-## Próximo passo
+## Autenticação MCP
 
-Autenticação do endpoint MCP e um fluxo LangGraph podem ser adicionados quando o contrato de acesso estiver definido.
+Gere o JWT na aplicação que conhece a sessão do usuário. O payload deve conter `sub`, `user_type`, `iss`, `aud` e `exp`; envie-o como `Authorization: Bearer <token>` nas chamadas MCP. O servidor rejeita tokens ausentes, expirados, inválidos ou com outro usuário.
 
 ## Estrutura
 
@@ -106,6 +111,7 @@ app/
 ├── core/config.py         # configuração carregada do .env
 ├── cli.py                 # ingestão incremental a partir de ./docs
 ├── mcp_server.py          # ferramentas MCP e transporte HTTP
+├── services/auth.py       # validação JWT e identidade do usuário
 ├── services/database.py   # conexão read-only e contexto por usuário
 ├── services/knowledge.py  # Qdrant + NVIDIA embeddings
 └── main.py                # aplicação FastAPI e montagem do MCP

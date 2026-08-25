@@ -9,8 +9,10 @@ from app.mcp_server import mcp
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Run the MCP session manager for the FastAPI application lifetime."""
     async with mcp.session_manager.run():
         yield
+
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
