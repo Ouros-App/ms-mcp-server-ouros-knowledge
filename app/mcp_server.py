@@ -4,7 +4,7 @@ from mcp.server.auth.settings import AuthSettings
 from mcp.server.fastmcp import FastMCP
 
 from app.core.config import settings
-from app.services.auth import MidasTokenVerifier, get_authenticated_identity
+from app.services.auth import StaticTokenVerifier, get_authenticated_identity
 from app.services.database import (
     get_user_context as get_database_user_context,
 )
@@ -27,10 +27,10 @@ mcp = FastMCP(
     json_response=True,
     streamable_http_path="/",
     auth=AuthSettings(
-        issuer_url=settings.MCP_JWT_ISSUER_URL,
+        issuer_url=settings.MCP_RESOURCE_URL,
         resource_server_url=settings.MCP_RESOURCE_URL,
     ),
-    token_verifier=MidasTokenVerifier(),
+    token_verifier=StaticTokenVerifier(),
 )
 
 

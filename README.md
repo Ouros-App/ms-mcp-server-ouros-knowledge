@@ -31,8 +31,9 @@ NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1
 NVIDIA_EMBEDDING_MODEL=nvidia/llama-nemotron-embed-1b-v2
 MIDAS_DATABASE_URL=postgresql://midas_ro:senha@host-neon/segundo_prod?sslmode=require&channel_binding=require
 MIDAS_DB_CONNECT_TIMEOUT=10
-MCP_JWT_SECRET=gere-um-segredo-com-pelo-menos-32-caracteres
-MCP_JWT_ISSUER_URL=https://auth.ouros.local
+MCP_AUTH_TOKEN=gere-um-token-secreto-com-pelo-menos-32-caracteres
+MCP_USER_TYPE=farm_owner
+MCP_USER_ID=42
 MCP_RESOURCE_URL=http://localhost:8000/mcp
 ```
 
@@ -40,7 +41,7 @@ O mesmo modelo de embedding precisa ter sido usado para gravar os vetores na col
 
 `MIDAS_DATABASE_URL` deve usar a role `midas_ro` criada pela migration. A role acessa as views do schema `midas`, sem as colunas de senha, e não recebe uma ferramenta de SQL arbitrário. A senha real deve ficar somente no `.env`/secret manager.
 
-O endpoint MCP exige um JWT HS256 no header `Authorization: Bearer <token>`. O token precisa ser assinado com `MCP_JWT_SECRET` e conter `sub`, `user_type`, `iss`, `aud` e `exp`. `user_type` aceita `farm_owner`, `company_employee` ou `admin`; o `sub` é o ID do usuário. As tools derivam a identidade desses claims e não aceitam `user_id` enviado pelo modelo.
+O endpoint MCP exige o token fixo de `MCP_AUTH_TOKEN` no header `Authorization: Bearer <token>`. Use um valor aleatório com pelo menos 32 caracteres e mantenha-o somente no `.env`/secret manager. `MCP_USER_TYPE` e `MCP_USER_ID` definem a identidade MIDAS fixa usada pelas tools personalizadas; o token não deve ser enviado pelo modelo.
 
 ## Execução local
 
@@ -101,7 +102,7 @@ O CLI mantém `docs/.qdrant-manifest.json` com o SHA-256, modelo, coleção, par
 
 ## Autenticação MCP
 
-Gere o JWT na aplicação que conhece a sessão do usuário. O payload deve conter `sub`, `user_type`, `iss`, `aud` e `exp`; envie-o como `Authorization: Bearer <token>` nas chamadas MCP. O servidor rejeita tokens ausentes, expirados, inválidos ou com outro usuário.
+Envie o mesmo valor configurado em `MCP_AUTH_TOKEN` como `Authorization: Bearer <token>` nas chamadas MCP. Como esse modelo usa um token compartilhado, ele representa uma única identidade MIDAS configurada por `MCP_USER_TYPE` e `MCP_USER_ID`; para múltiplos usuários simultâneos, será necessário voltar a usar tokens com identidade individual.
 
 ## Estrutura
 
@@ -111,7 +112,7 @@ app/
 ├── core/config.py         # configuração carregada do .env
 ├── cli.py                 # ingestão incremental a partir de ./docs
 ├── mcp_server.py          # ferramentas MCP e transporte HTTP
-├── services/auth.py       # validação JWT e identidade do usuário
+├── services/auth.py       # validação do token fixo e identidade do usuário
 ├── services/database.py   # conexão read-only e contexto por usuário
 ├── services/knowledge.py  # Qdrant + NVIDIA embeddings
 └── main.py                # aplicação FastAPI e montagem do MCP
