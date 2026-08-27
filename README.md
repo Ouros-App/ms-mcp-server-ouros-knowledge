@@ -1,143 +1,168 @@
-# ms-fastapi-template
+# ms-mcp-server-ouros-knowledge
+
+Servidor FastAPI com transporte MCP via Streamable HTTP para consultar uma coleção Qdrant usando embeddings da NVIDIA NIM.
 
 <!-- REPO-METADATA:START -->
-<div align="center">
-
-[![Repo Size](https://img.shields.io/github/repo-size/Ouros-App/ms-fastapi-template?style=flat-square&label=REPO%20SIZE)](https://github.com/Ouros-App/ms-fastapi-template)
-[![Languages](https://img.shields.io/github/languages/count/Ouros-App/ms-fastapi-template?style=flat-square&label=LANGUAGES)](https://github.com/Ouros-App/ms-fastapi-template/languages)
-[![Forks](https://img.shields.io/github/forks/Ouros-App/ms-fastapi-template?style=flat-square&label=FORKS)](https://github.com/Ouros-App/ms-fastapi-template/network/members)
-[![Issues](https://img.shields.io/github/issues/Ouros-App/ms-fastapi-template?style=flat-square&label=ISSUES)](https://github.com/Ouros-App/ms-fastapi-template/issues)
-[![Pull Requests](https://img.shields.io/github/issues-pr/Ouros-App/ms-fastapi-template?style=flat-square&label=PULL%20REQUESTS)](https://github.com/Ouros-App/ms-fastapi-template/pulls)
-
-</div>
+<!-- Metadados automáticos do repositório são mantidos pelo workflow. -->
 <!-- REPO-METADATA:END -->
 
-Template mínimo para iniciar um microsserviço com FastAPI.
+## O que já existe
 
-## Status e escopo
-
-A implementação atual expõe apenas uma API básica com dois endpoints:
-
-- `GET /`: retorna `{"message": "FastAPI microservice is running"}`.
-- `GET /health`: retorna `{"status": "ok"}`.
-
-O projeto já contém a separação inicial entre API, configuração, schemas, serviços, repositórios e modelos. As pastas `models`, `repositories` e `services` ainda não possuem implementação além de seus arquivos de pacote.
-
-## Recursos e componentes
-
-- FastAPI com metadados definidos em `app/core/config.py`.
-- Schemas Pydantic em `app/schemas/common.py`.
-- Rotas registradas por `app/main.py`.
-- `Dockerfile` para execução com Uvicorn.
-- `run.sh` para criar, recriar, remover e listar containers Docker.
-- `run_compose.sh` para gerar arquivos Compose temporários e executar instâncias numeradas.
-
-## Pré-requisitos
-
-- Python e `pip`.
-- Docker para os fluxos baseados em container.
-- Bash para executar `run.sh` e `run_compose.sh`.
-
-As dependências Python estão fixadas em:
-
-- `fastapi==0.115.6`
-- `uvicorn[standard]==0.34.0`
+- `GET /` e `GET /health` para operação básica.
+- Endpoint MCP em `http://localhost:8000/mcp`.
+- Ferramenta MCP `search_knowledge(query, limit)` para busca semântica.
+- Ferramenta MCP `qdrant_status()` para verificar a coleção configurada.
+- Ferramenta MCP `postgres_status()` para verificar a conexão somente leitura do MIDAS.
+- Ferramentas MCP `get_user_context(user_type, user_id)` e `get_user_farm_data(user_type, user_id, limit)` para contexto personalizado por usuário.
+- CLI `ingest` para extrair, dividir, embeddar e enviar arquivos ao Qdrant.
+- `QdrantVectorStore` e `NVIDIAEmbeddings` da stack LangChain.
+- `.env` local ignorado pelo Git e `.env.example` como modelo de configuração.
 
 ## Configuração
 
-O arquivo `.env.example` contém:
+Preencha o `.env` local:
 
 ```dotenv
-APP_PORT=8000
-APP_NAME=fastapi_microservice
+QDRANT_URL=http://localhost:6333
+QDRANT_API_KEY=
+QDRANT_COLLECTION_NAME=ouros_knowledge
+NVIDIA_API_KEY=nvapi-...
+NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1
+NVIDIA_EMBEDDING_MODEL=nvidia/llama-nemotron-embed-1b-v2
+MIDAS_DATABASE_URL=postgresql://midas_ro:senha@host-neon/segundo_prod?sslmode=require&channel_binding=require
+MIDAS_DB_CONNECT_TIMEOUT=10
+MCP_AUTH_TOKEN=gere-um-token-secreto-com-pelo-menos-32-caracteres
+MCP_RESOURCE_URL=http://localhost:8000/mcp
 ```
 
-Copie-o para `.env` quando usar os scripts ou o `Dockerfile`:
+O mesmo modelo de embedding precisa ter sido usado para gravar os vetores na coleção Qdrant. A coleção também precisa existir antes da busca; a ferramenta `qdrant_status` mostra essa condição sem chamar a NVIDIA.
 
-```bash
-cp .env.example .env
-```
+`MIDAS_DATABASE_URL` deve usar a role `midas_ro` criada pela migration. A role acessa as views do schema `midas`, sem as colunas de senha, e não recebe uma ferramenta de SQL arbitrário. A senha real deve ficar somente no `.env`/secret manager.
 
-`APP_PORT` e `APP_NAME` são usados pelos scripts e pelo container. Os metadados da aplicação definidos em `Settings` ainda são constantes no código.
+O endpoint MCP exige o token fixo de `MCP_AUTH_TOKEN` no header `Authorization: Bearer <token>`. Use um valor aleatório com pelo menos 32 caracteres e mantenha-o somente no `.env`/secret manager. A identidade MIDAS (`user_type` e `user_id`) é enviada em cada chamada das tools e validada pelo servidor.
 
-## Instalação e execução local
+## Execução local
 
 ```bash
 python -m venv .venv
+
+# Linux/macOS/WSL
 source .venv/bin/activate
+
+# Windows PowerShell
+.\.venv\Scripts\Activate.ps1
+
 pip install -r requirements.txt
-uvicorn app.main:app --reload
+uvicorn app.main:app --reload --port 8000
 ```
 
-A aplicação fica disponível em `http://localhost:8000`. A documentação interativa do FastAPI fica em `/docs` e o schema OpenAPI em `/openapi.json`.
+URLs:
 
-## Execução com Docker
+- API: `http://localhost:8000`
+- Swagger/OpenAPI: `http://localhost:8000/docs`
+- ReDoc: `http://localhost:8000/redoc`
+- MCP: `http://localhost:8000/mcp/`
 
-`run.sh` exige um `.env` com `APP_NAME` e oferece os modos abaixo:
+O Swagger documenta `GET /` e `GET /health`. O endpoint MCP é um transporte
+Streamable HTTP montado em `/mcp/`, então suas tools aparecem e são descritas
+no handshake/listagem do cliente MCP, não como operações REST no Swagger.
+
+## Docker
+
+O container não copia `.env` para a imagem. Injete os secrets em runtime:
 
 ```bash
-./run.sh
-./run.sh --reboot NUMERO
-./run.sh --remove NUMERO
-./run.sh --list
+docker build -t ouros-knowledge-mcp .
+docker run --rm --env-file .env -p 8000:8000 ouros-knowledge-mcp
 ```
 
-`run_compose.sh` também exige `.env` com `APP_NAME`, detecta `docker compose` ou `docker-compose`, gera o Compose da instância e aceita:
+## CLI de ingestão
+
+O CLI lê `./docs` por padrão. Ele processa PDF, DOCX, TXT, Markdown, CSV, JSON e HTML:
 
 ```bash
-./run_compose.sh
-./run_compose.sh --rebuild
-./run_compose.sh --rebuild NUMERO
-./run_compose.sh --reboot NUMERO
-./run_compose.sh --bind NUMERO
-./run_compose.sh --help
+python -m app.cli ingest
+python -m app.cli ingest ./docs
+python -m app.cli ingest contrato.pdf manual.docx
 ```
 
-Não há um `docker-compose.yml` estático neste repositório. O script `run_compose.sh` gera um arquivo temporário para cada instância.
+Antes do upload, confira os chunks sem gastar chamada da NVIDIA:
 
-## Testes e qualidade
+```bash
+python -m app.cli ingest --dry-run
+```
 
-O diretório `tests/` contém apenas `__init__.py`; não há casos de teste automatizados implementados no estado atual.
+Opções úteis:
 
-## Estrutura do projeto
+```bash
+python -m app.cli ingest \
+  --chunk-size 1000 \
+  --chunk-overlap 150 \
+  --batch-size 32
+```
+
+O CLI mantém `docs/.qdrant-manifest.json` com o SHA-256, modelo, coleção, parâmetros de chunking e IDs dos chunks. Em execuções seguintes, arquivos sem alteração e com os mesmos parâmetros são ignorados; documentos modificados, renomeados ou removidos dentro dos diretórios processados são reconciliados no Qdrant. O mesmo modelo configurado no servidor (`NVIDIA_EMBEDDING_MODEL`) é usado no upload. PDFs escaneados sem camada de texto precisam de OCR, que ainda não está incluído.
+
+## Autenticação MCP
+
+Envie o mesmo valor configurado em `MCP_AUTH_TOKEN` como `Authorization: Bearer <token>` nas chamadas MCP. O token compartilhado autentica o cliente, enquanto `user_type` e `user_id` identificam o usuário consultado. Qualquer cliente que possua esse token pode solicitar outra identidade; para clientes não confiáveis, use tokens individuais com identidade embutida.
+
+Tools disponíveis:
+
+- `search_knowledge(query, limit=5)`: busca semântica no Qdrant; `limit` entre 1 e 20.
+- `qdrant_status()`: verifica a coleção Qdrant sem chamar a NVIDIA.
+- `postgres_status()`: verifica a conexão PostgreSQL somente leitura do MIDAS.
+- `get_user_context(user_type, user_id)`: retorna perfil, empresas e farms do usuário.
+- `get_user_farm_data(user_type, user_id, limit=20)`: retorna farms, metas, consumos, lotes e dicas; `limit` entre 1 e 100.
+
+Os valores aceitos para `user_type` são `farm_owner`, `company_employee` e `admin`. Exemplos de argumentos para um cliente MCP:
+
+```json
+{
+  "name": "get_user_context",
+  "arguments": {
+    "user_type": "farm_owner",
+    "user_id": 42
+  }
+}
+```
+
+```json
+{
+  "name": "get_user_farm_data",
+  "arguments": {
+    "user_type": "farm_owner",
+    "user_id": 42,
+    "limit": 20
+  }
+}
+```
+
+## Estrutura
 
 ```text
-.
-├── app/
-│   ├── api/routes.py
-│   ├── core/config.py
-│   ├── models/
-│   ├── repositories/
-│   ├── schemas/common.py
-│   ├── services/
-│   └── main.py
-├── tests/
-├── .env.example
-├── Dockerfile
-├── requirements.txt
-├── run.sh
-└── run_compose.sh
+app/
+├── api/routes.py          # endpoints FastAPI
+├── core/config.py         # configuração carregada do .env
+├── cli.py                 # ingestão incremental a partir de ./docs
+├── mcp_server.py          # ferramentas MCP e transporte HTTP
+├── services/auth.py       # validação do token fixo e identidade do usuário
+├── services/database.py   # conexão read-only e contexto por usuário
+├── services/knowledge.py  # Qdrant + NVIDIA embeddings
+└── main.py                # aplicação FastAPI e montagem do MCP
+
+docs/
+└── .qdrant-manifest.json  # estado local da sincronização
 ```
-
-## Limitações conhecidas
-
-O `Dockerfile` atualmente copia um arquivo `.env` e valida arquivos em `app/templates/workflows/`, mas esses caminhos não aparecem na árvore atual do repositório. Portanto, o build Docker não é considerado um fluxo pronto sem ajustar essa divergência.
-
-## Contribuição
-
-Faça alterações em uma branch própria e use os templates de pull request disponíveis em `.github/PULL_REQUEST_TEMPLATE`.
 
 ## Licença
 
-Este projeto está sob a licença MIT. Consulte o arquivo [LICENSE](LICENSE).
-
+MIT. Consulte [LICENSE](LICENSE).
 
 ## Principais contribuidores
 
 <!-- CONTRIBUTORS:START -->
 - [@Nicolas25vlad](https://github.com/Nicolas25vlad) — 14 contribuições
-- [@Andre-Roger](https://github.com/Andre-Roger) — 1 contribuições
-- [@juwata](https://github.com/juwata) — 1 contribuições
+- [@Andre-Roger](https://github.com/Andre-Roger) — 1 contribuição
+- [@juwata](https://github.com/juwata) — 1 contribuição
 <!-- CONTRIBUTORS:END -->
-
-> Atualizado automaticamente semanalmente pelo workflow de metadados do README.
