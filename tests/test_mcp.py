@@ -58,8 +58,12 @@ class McpTests(unittest.TestCase):
             app.routes[route_index] = previous_route
             mcp._token_verifier = previous_verifier
 
-        self.assertNotEqual(response.status_code, 421)
-        self.assertNotEqual(response.status_code, 401)
+        self.assertGreaterEqual(response.status_code, 200)
+        self.assertLess(response.status_code, 300)
+        payload = response.json()
+        self.assertEqual(payload["jsonrpc"], "2.0")
+        self.assertEqual(payload["id"], 1)
+        self.assertIn("result", payload)
 
     def test_fastapi_routes_and_app(self) -> None:
         self.assertEqual(read_root().message, "Ouros Knowledge MCP is running")
