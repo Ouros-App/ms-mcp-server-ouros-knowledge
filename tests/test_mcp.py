@@ -6,6 +6,7 @@ from app.main import app
 from app.mcp_server import (
     get_user_context,
     get_user_farm_data,
+    mcp,
     postgres_status,
     qdrant_status,
     search_knowledge,
@@ -13,6 +14,9 @@ from app.mcp_server import (
 
 
 class McpTests(unittest.TestCase):
+    def test_mcp_binds_to_public_container_interface(self) -> None:
+        self.assertEqual(mcp.settings.host, "0.0.0.0")
+
     def test_fastapi_routes_and_app(self) -> None:
         self.assertEqual(read_root().message, "Ouros Knowledge MCP is running")
         self.assertEqual(health_check().status, "ok")

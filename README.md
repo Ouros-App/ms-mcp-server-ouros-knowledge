@@ -32,7 +32,7 @@ NVIDIA_EMBEDDING_MODEL=nvidia/llama-nemotron-embed-1b-v2
 MIDAS_DATABASE_URL=postgresql://midas_ro:senha@host-neon/segundo_prod?sslmode=require&channel_binding=require
 MIDAS_DB_CONNECT_TIMEOUT=10
 MCP_AUTH_TOKEN=gere-um-token-secreto-com-pelo-menos-32-caracteres
-MCP_RESOURCE_URL=http://localhost:8000/mcp
+MCP_RESOURCE_URL=https://ms-midas-mcp.discloud.app/mcp
 ```
 
 O mesmo modelo de embedding precisa ter sido usado para gravar os vetores na coleção Qdrant. A coleção também precisa existir antes da busca; a ferramenta `qdrant_status` mostra essa condição sem chamar a NVIDIA.
@@ -61,7 +61,8 @@ URLs:
 - API: `http://localhost:8000`
 - Swagger/OpenAPI: `http://localhost:8000/docs`
 - ReDoc: `http://localhost:8000/redoc`
-- MCP: `http://localhost:8000/mcp/`
+- MCP local: `http://localhost:8000/mcp/`
+- MCP público: `https://ms-midas-mcp.discloud.app/mcp/`
 
 O Swagger documenta `GET /` e `GET /health`. O endpoint MCP é um transporte
 Streamable HTTP montado em `/mcp/`, então suas tools aparecem e são descritas
