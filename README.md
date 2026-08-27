@@ -32,10 +32,12 @@ NVIDIA_EMBEDDING_MODEL=nvidia/llama-nemotron-embed-1b-v2
 MIDAS_DATABASE_URL=postgresql://midas_ro:senha@host-neon/segundo_prod?sslmode=require&channel_binding=require
 MIDAS_DB_CONNECT_TIMEOUT=10
 MCP_AUTH_TOKEN=gere-um-token-secreto-com-pelo-menos-32-caracteres
-MCP_RESOURCE_URL=https://ms-midas-mcp.discloud.app/mcp
+MCP_RESOURCE_URL=http://localhost:8000/mcp
 ```
 
 O mesmo modelo de embedding precisa ter sido usado para gravar os vetores na coleção Qdrant. A coleção também precisa existir antes da busca; a ferramenta `qdrant_status` mostra essa condição sem chamar a NVIDIA.
+
+No deployment público, sobrescreva `MCP_RESOURCE_URL` com `https://ms-midas-mcp.discloud.app/mcp` no ambiente da aplicação.
 
 `MIDAS_DATABASE_URL` deve usar a role `midas_ro` criada pela migration. A role acessa as views do schema `midas`, sem as colunas de senha, e não recebe uma ferramenta de SQL arbitrário. A senha real deve ficar somente no `.env`/secret manager.
 

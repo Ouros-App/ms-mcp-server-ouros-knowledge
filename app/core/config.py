@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     MIDAS_DATABASE_URL: str | None = None
     MIDAS_DB_CONNECT_TIMEOUT: int = 10
     MCP_AUTH_TOKEN: str | None = None
-    MCP_RESOURCE_URL: str = "https://ms-midas-mcp.discloud.app/mcp"
+    MCP_RESOURCE_URL: str = "http://localhost:8000/mcp"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
