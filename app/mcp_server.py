@@ -23,6 +23,7 @@ from app.services.knowledge import (
 
 mcp = FastMCP(
     name=settings.PROJECT_NAME,
+    host="0.0.0.0",
     stateless_http=True,
     json_response=True,
     streamable_http_path="/",

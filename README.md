@@ -37,6 +37,8 @@ MCP_RESOURCE_URL=http://localhost:8000/mcp
 
 O mesmo modelo de embedding precisa ter sido usado para gravar os vetores na coleção Qdrant. A coleção também precisa existir antes da busca; a ferramenta `qdrant_status` mostra essa condição sem chamar a NVIDIA.
 
+No deployment público, sobrescreva `MCP_RESOURCE_URL` com `https://ms-midas-mcp.discloud.app/mcp` no ambiente da aplicação.
+
 `MIDAS_DATABASE_URL` deve usar a role `midas_ro` criada pela migration. A role acessa as views do schema `midas`, sem as colunas de senha, e não recebe uma ferramenta de SQL arbitrário. A senha real deve ficar somente no `.env`/secret manager.
 
 O endpoint MCP exige o token fixo de `MCP_AUTH_TOKEN` no header `Authorization: Bearer <token>`. Use um valor aleatório com pelo menos 32 caracteres e mantenha-o somente no `.env`/secret manager. A identidade MIDAS (`user_type` e `user_id`) é enviada em cada chamada das tools e validada pelo servidor.
@@ -61,7 +63,8 @@ URLs:
 - API: `http://localhost:8000`
 - Swagger/OpenAPI: `http://localhost:8000/docs`
 - ReDoc: `http://localhost:8000/redoc`
-- MCP: `http://localhost:8000/mcp/`
+- MCP local: `http://localhost:8000/mcp/`
+- MCP público: `https://ms-midas-mcp.discloud.app/mcp/`
 
 O Swagger documenta `GET /` e `GET /health`. O endpoint MCP é um transporte
 Streamable HTTP montado em `/mcp/`, então suas tools aparecem e são descritas
