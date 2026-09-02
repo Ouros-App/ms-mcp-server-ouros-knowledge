@@ -71,7 +71,7 @@ def file_to_markdown(filename: str, content_type: str, encoded_file: str) -> str
 
 def extract_resource_records(markdown: str, source_name: str) -> dict[str, Any]:
     """Ask an NVIDIA NIM to extract canonical records without performing writes."""
-    if not settings.NVIDIA_NIM_API_KEY or not settings.NVIDIA_NIM_URL:
+    if not settings.NVIDIA_API_KEY or not settings.NVIDIA_NIM_URL:
         raise RuntimeError("NVIDIA NIM não está configurado")
     prompt = (
         "Extraia somente registros históricos de água e energia deste documento. "
@@ -85,7 +85,7 @@ def extract_resource_records(markdown: str, source_name: str) -> dict[str, Any]:
                "messages": [{"role": "system", "content": prompt},
                             {"role": "user", "content": markdown}]}
     request = Request(settings.NVIDIA_NIM_URL, data=json.dumps(payload).encode(),
-                      headers={"Authorization": f"Bearer {settings.NVIDIA_NIM_API_KEY}",
+                      headers={"Authorization": f"Bearer {settings.NVIDIA_API_KEY}",
                                "Content-Type": "application/json"}, method="POST")
     try:
         with urlopen(request, timeout=settings.NVIDIA_NIM_TIMEOUT) as response:
