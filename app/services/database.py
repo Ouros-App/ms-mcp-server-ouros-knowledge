@@ -1,9 +1,11 @@
 from datetime import date, datetime, time
 from decimal import Decimal
 from typing import Any, Literal
+from uuid import UUID
 
 import psycopg
 from psycopg.rows import dict_row
+from psycopg.types.json import Jsonb
 
 from app.core.config import settings
 
@@ -53,6 +55,45 @@ def _validate_limit(limit: int) -> None:
     """Validate the maximum number of records returned per collection."""
     if not 1 <= limit <= 100:
         raise ValueError("limit deve estar entre 1 e 100")
+
+
+def import_resource_records(
+    user_type: UserType,
+    user_id: int,
+    request_id: str,
+    source_type: str,
+    source_name: str,
+    records: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Submit a validated historical import through the PostgreSQL function only."""
+    _validate_user(user_type, user_id)
+    try:
+        parsed_request_id = UUID(request_id)
+    except (TypeError, ValueError, AttributeError) as error:
+        raise ValueError("request_id deve ser um UUID válido") from error
+    if not source_type.strip() or not source_name.strip():
+        raise ValueError("source_type e source_name não podem ser vazios")
+    if not isinstance(records, list) or len(records) > 1000:
+        raise ValueError("records deve ser uma lista com no máximo 1000 itens")
+    if any(not isinstance(record, dict) for record in records):
+        raise ValueError("cada registro deve ser um objeto JSON")
+    payload = Jsonb(records)
+    if len(str(payload.obj).encode("utf-8")) > 1024 * 1024:
+        raise ValueError("payload de importação excede 1 MiB")
+
+    with _connect() as connection:
+        row = connection.execute(
+            """
+            SELECT midas.import_resource_records(
+                %s, %s, %s, %s, %s, %s
+            ) AS result
+            """,
+            (parsed_request_id, user_type, user_id, source_type.strip(),
+             source_name.strip(), payload),
+        ).fetchone()
+    if not row or not isinstance(row["result"], dict):
+        raise RuntimeError("função de importação retornou resposta inválida")
+    return _json_safe(row["result"])
 
 
 def _resolve_user_scope(
