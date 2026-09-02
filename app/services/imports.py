@@ -94,7 +94,7 @@ def extract_resource_records(markdown: str, source_name: str) -> dict[str, Any]:
         result = json.loads(content) if isinstance(content, str) else content
         records = result.get("records")
         if not isinstance(records, list):
-            raise ValueError("NIM não retornou uma lista de records")
+            raise TypeError("NIM não retornou uma lista de records")
         return {"source_name": source_name, "records": records, "preview": True}
     except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
         raise RuntimeError("resposta inválida do NVIDIA NIM") from error
