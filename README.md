@@ -78,7 +78,8 @@ Preencha os valores necessários no `.env`:
 | `NVIDIA_BASE_URL` | `https://integrate.api.nvidia.com/v1` | Endpoint da API de embeddings. |
 | `NVIDIA_EMBEDDING_MODEL` | `nvidia/llama-nemotron-embed-1b-v2` | Modelo usado para gerar embeddings. |
 | `SEARCH_TOP_K` | `5` | Quantidade padrão de resultados da busca. |
-| `MIDAS_DATABASE_URL` | vazio | URL de conexão PostgreSQL do MIDAS. |
+| `MIDAS_DATABASE_URL` | vazio | URL de conexão PostgreSQL somente leitura do MIDAS. |
+| `MIDAS_IMPORT_DATABASE_URL` | vazio | URL exclusiva da role `midas_importer`, com `EXECUTE` apenas na função de importação. |
 | `MIDAS_DB_CONNECT_TIMEOUT` | `10` | Timeout da conexão PostgreSQL, em segundos. |
 | `MCP_AUTH_TOKEN` | vazio | Token Bearer usado para autenticar clientes MCP. |
 | `MCP_RESOURCE_URL` | `http://localhost:8000/mcp` | URL base do recurso MCP; em produção, use a URL pública. |
@@ -99,6 +100,7 @@ NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1
 NVIDIA_EMBEDDING_MODEL=nvidia/llama-nemotron-embed-1b-v2
 
 MIDAS_DATABASE_URL=postgresql://midas_ro:senha@host/segundo_prod?sslmode=require&channel_binding=require
+MIDAS_IMPORT_DATABASE_URL=postgresql://midas_importer:senha@host/segundo_prod?sslmode=require&channel_binding=require
 MIDAS_DB_CONNECT_TIMEOUT=10
 
 MCP_AUTH_TOKEN=gere-um-token-aleatorio-com-pelo-menos-32-caracteres
@@ -110,7 +112,7 @@ Cuidados importantes:
 - Use o mesmo `NVIDIA_EMBEDDING_MODEL` utilizado para criar os vetores da coleção Qdrant.
 - A coleção Qdrant precisa existir antes da busca ou da ingestão.
 - Gere `MCP_AUTH_TOKEN` aleatoriamente, com pelo menos 32 caracteres.
-- Use uma role PostgreSQL com acesso somente leitura às tabelas necessárias do schema `midas`.
+- Use `midas_ro` somente para consultas e `midas_importer` somente para executar `midas.import_resource_records`.
 - Nunca versione tokens, senhas ou URLs de conexão reais. O `.env` está ignorado pelo Git.
 - Em um deployment público, configure `MCP_RESOURCE_URL` para a URL pública terminada em `/mcp`, por exemplo `https://ms-midas-mcp.discloud.app/mcp`.
 
@@ -173,7 +175,7 @@ Exemplo de argumentos:
 }
 ```
 
-O token compartilhado autentica o cliente, mas não representa uma identidade individual: qualquer cliente que possua esse token pode solicitar outra identidade válida. Para clientes não confiáveis, prefira tokens individuais e uma estratégia de autorização que associe o token ao usuário.
+O token MCP é um segredo service-to-service e possui um único consumidor confiável: o `ms-ai-server`. Os frontends não acessam este MCP diretamente. O `ms-ai-server` autentica o usuário, valida que o `user_id` da requisição corresponde ao usuário autenticado e repassa a identidade ao MCP. O MCP valida o token de serviço e o banco deriva a granja permitida e aplica a autorização final.
 
 ## Ingestão de documentos
 

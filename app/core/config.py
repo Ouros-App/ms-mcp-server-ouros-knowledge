@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     IMPORT_MARKDOWN_MAX_CHARS: int = 120_000
     SEARCH_TOP_K: int = 5
     MIDAS_DATABASE_URL: str | None = None
+    MIDAS_IMPORT_DATABASE_URL: str | None = None
     MIDAS_DB_CONNECT_TIMEOUT: int = 10
     MCP_AUTH_TOKEN: str | None = None
     MCP_RESOURCE_URL: str = "http://localhost:8000/mcp"

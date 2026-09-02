@@ -25,6 +25,17 @@ def _connect() -> psycopg.Connection:
     )
 
 
+def _connect_import() -> psycopg.Connection:
+    """Open the restricted database connection used only for imports."""
+    if not settings.MIDAS_IMPORT_DATABASE_URL:
+        raise RuntimeError("MIDAS_IMPORT_DATABASE_URL não está configurada no .env")
+    return psycopg.connect(
+        settings.MIDAS_IMPORT_DATABASE_URL,
+        connect_timeout=settings.MIDAS_DB_CONNECT_TIMEOUT,
+        row_factory=dict_row,
+    )
+
+
 def _json_safe(value: Any) -> Any:
     """Convert PostgreSQL values into JSON-compatible primitives."""
     if isinstance(value, (datetime, date, time)):
@@ -81,7 +92,7 @@ def import_resource_records(
     if len(str(payload.obj).encode("utf-8")) > 1024 * 1024:
         raise ValueError("payload de importação excede 1 MiB")
 
-    with _connect() as connection:
+    with _connect_import() as connection:
         row = connection.execute(
             """
             SELECT midas.import_resource_records(
