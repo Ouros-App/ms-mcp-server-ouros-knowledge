@@ -13,6 +13,11 @@ class Settings(BaseSettings):
     NVIDIA_API_KEY: str | None = None
     NVIDIA_BASE_URL: str = "https://integrate.api.nvidia.com/v1"
     NVIDIA_EMBEDDING_MODEL: str = "nvidia/llama-nemotron-embed-1b-v2"
+    NVIDIA_NIM_URL: str | None = None
+    NVIDIA_NIM_API_KEY: str | None = None
+    NVIDIA_NIM_MODEL: str = "meta/llama-3.1-70b-instruct"
+    NVIDIA_NIM_TIMEOUT: int = 60
+    IMPORT_MARKDOWN_MAX_CHARS: int = 120_000
     SEARCH_TOP_K: int = 5
     MIDAS_DATABASE_URL: str | None = None
     MIDAS_DB_CONNECT_TIMEOUT: int = 10

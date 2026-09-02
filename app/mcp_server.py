@@ -20,6 +20,7 @@ from app.services.database import (
 from app.services.knowledge import (
     qdrant_status as get_qdrant_status,
 )
+from app.services.imports import extract_resource_records, file_to_markdown
 from app.services.knowledge import (
     search_knowledge as search_qdrant,
 )
@@ -120,3 +121,20 @@ def import_user_resource_records(
     return get_database_import_resource_records(
         authenticated_type, authenticated_id, request_id, source_type, source_name, records
     )
+
+
+@mcp.tool()
+def prepare_resource_import(
+    filename: str,
+    content_type: str,
+    encoded_file: str,
+) -> dict[str, Any]:
+    """Convert a PDF/XLSX and use NVIDIA NIM to prepare an import preview.
+
+    This tool never writes to PostgreSQL. The returned records must be reviewed
+    and explicitly sent to ``import_user_resource_records`` afterward.
+    """
+    if not filename.strip():
+        raise ValueError("filename não pode ser vazio")
+    markdown = file_to_markdown(filename.strip(), content_type, encoded_file)
+    return extract_resource_records(markdown, filename.strip())
