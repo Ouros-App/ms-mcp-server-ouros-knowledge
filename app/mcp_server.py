@@ -12,8 +12,12 @@ from app.services.database import (
     get_user_farm_data as get_database_user_farm_data,
 )
 from app.services.database import (
+    import_resource_records as get_database_import_resource_records,
+)
+from app.services.database import (
     postgres_status as get_postgres_status,
 )
+from app.services.imports import extract_resource_records, file_to_markdown
 from app.services.knowledge import (
     qdrant_status as get_qdrant_status,
 )
@@ -95,3 +99,42 @@ def get_user_farm_data(
     """
     user_type, user_id = get_authenticated_identity(user_type, user_id)
     return get_database_user_farm_data(user_type, user_id, limit)
+
+
+@mcp.tool()
+def import_user_resource_records(
+    user_type: Literal["farm_owner", "company_employee", "admin"],
+    user_id: int,
+    request_id: str,
+    source_type: str,
+    source_name: str,
+    records: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Import historical water or energy records through the controlled DB function.
+
+    The database currently authorizes only farm-owner imports and applies the
+    final farm scope, validation, transaction and idempotency checks.
+    """
+    authenticated_type, authenticated_id = get_authenticated_identity(user_type, user_id)
+    if authenticated_type != "farm_owner":
+        raise PermissionError("somente farm_owner pode importar registros")
+    return get_database_import_resource_records(
+        authenticated_type, authenticated_id, request_id, source_type, source_name, records
+    )
+
+
+@mcp.tool()
+def prepare_resource_import(
+    filename: str,
+    content_type: str,
+    encoded_file: str,
+) -> dict[str, Any]:
+    """Convert a PDF/XLSX and use NVIDIA NIM to prepare an import preview.
+
+    This tool never writes to PostgreSQL. The returned records must be reviewed
+    and explicitly sent to ``import_user_resource_records`` afterward.
+    """
+    if not filename.strip():
+        raise ValueError("filename não pode ser vazio")
+    markdown = file_to_markdown(filename.strip(), content_type, encoded_file)
+    return extract_resource_records(markdown, filename.strip())

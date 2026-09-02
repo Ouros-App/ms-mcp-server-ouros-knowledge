@@ -9,6 +9,7 @@ from app.main import app
 from app.mcp_server import (
     get_user_context,
     get_user_farm_data,
+    import_user_resource_records,
     mcp,
     postgres_status,
     qdrant_status,
@@ -107,6 +108,18 @@ class McpTests(unittest.TestCase):
         self.assertEqual(get_user_farm_data("farm_owner", 42, 5), {"data": {}})
         identity.assert_called_once_with("farm_owner", 42)
         farm_data.assert_called_once_with("farm_owner", 42, 5)
+
+    @patch("app.mcp_server.get_database_import_resource_records", return_value={"status": "accepted"})
+    @patch("app.mcp_server.get_authenticated_identity", return_value=("farm_owner", 42))
+    def test_import_tool_uses_authenticated_identity(self, identity, importer) -> None:
+        result = import_user_resource_records(
+            "farm_owner", 42, "00000000-0000-0000-0000-000000000001", "excel", "x.xlsx", []
+        )
+        self.assertEqual(result, {"status": "accepted"})
+        identity.assert_called_once_with("farm_owner", 42)
+        importer.assert_called_once_with(
+            "farm_owner", 42, "00000000-0000-0000-0000-000000000001", "excel", "x.xlsx", []
+        )
 
 
 if __name__ == "__main__":

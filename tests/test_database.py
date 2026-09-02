@@ -10,6 +10,7 @@ from app.services.database import (
     _rows,
     get_user_context,
     get_user_farm_data,
+    import_resource_records,
     postgres_status,
 )
 
@@ -58,6 +59,29 @@ class FakeConnection:
 
 
 class DatabaseGuardTests(unittest.TestCase):
+    @patch("app.services.database._connect")
+    def test_import_resource_records_calls_controlled_function(self, connect) -> None:
+        cursor = FakeCursor([])
+        connection = FakeConnection(cursor, {"result": {"request_id": "abc", "status": "accepted"}})
+        connect.return_value = connection
+
+        result = import_resource_records(
+            "farm_owner", 42, "00000000-0000-0000-0000-000000000001", "excel", "historico.xlsx", [
+                {"resource_type": "energy", "farm_id": 8,
+                 "registration_date": "2025-01-31", "energy_consumption": 12.5,
+                 "source_row": 2, "confidence": 1.0}
+            ]
+        )
+
+        self.assertEqual(result["status"], "accepted")
+        self.assertEqual(connect.call_count, 1)
+
+    def test_import_resource_records_rejects_unsupported_input_before_connecting(self) -> None:
+        with patch("app.services.database._connect") as connect:
+            with self.assertRaises(ValueError):
+                import_resource_records("company_employee", 42, "abc", "excel", "x", [])  # type: ignore[arg-type]
+            connect.assert_not_called()
+
     def test_json_safe_converts_postgres_values(self) -> None:
         value = _json_safe(
             {
