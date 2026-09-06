@@ -1,5 +1,9 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.core.infisical import load_infisical_secrets
+
+load_infisical_secrets()
+
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Ouros Knowledge MCP"
