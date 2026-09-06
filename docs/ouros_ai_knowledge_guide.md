@@ -92,7 +92,7 @@ Os dados ambientais fundamentais do sistema são:
 - consumo total de energia;
 - preço regional do m³ de água;
 - preço regional do kWh;
-- quantidade de aves entregues/criadas no lote;
+- quantidade de aves entregues no lote;
 - identificação do produtor, granja, estado/região e lote;
 - dados históricos de lotes anteriores.
 
@@ -163,11 +163,11 @@ Distribuição definida por percentis da população elegível:
 
 | Liga | Faixa |
 |---|---:|
-| Ouro | 10% com melhor eficiência / menor consumo |
-| Prata | 20% seguintes |
-| Bronze | 30% centrais |
-| Cobre | 20% abaixo da média |
-| Ferro | 10% com pior eficiência / maior desperdício |
+| Ouro | percentis 0–10 (melhor eficiência / menor consumo) |
+| Prata | percentis 10–30 |
+| Bronze | percentis 30–60 |
+| Cobre | percentis 60–90 |
+| Ferro | percentis 90–100 (pior eficiência / maior desperdício) |
 
 > O TAP original citava apenas Ferro, Bronze, Prata e Ouro. A versão mais recente adiciona **Cobre**. Usar cinco ligas.
 
@@ -212,7 +212,7 @@ Quando a conexão volta:
 3. indicadores são atualizados;
 4. o ranking é recalculado/atualizado.
 
-Os dados podem permanecer localmente por tempo indeterminado, desde que o dispositivo mantenha as condições necessárias para preservá-los.
+Os dados podem permanecer localmente por no máximo 90 dias, com criptografia em repouso e controle de acesso; após esse prazo, devem ser eliminados, salvo retenção diferente aprovada formalmente.
 
 ---
 
