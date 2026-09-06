@@ -163,11 +163,11 @@ Distribuição definida por percentis da população elegível:
 
 | Liga | Faixa |
 |---|---:|
-| Ouro | percentis 0–10 (melhor eficiência / menor consumo) |
-| Prata | percentis 10–30 |
-| Bronze | percentis 30–60 |
-| Cobre | percentis 60–90 |
-| Ferro | percentis 90–100 (pior eficiência / maior desperdício) |
+| Ouro | [0, 10) (melhor eficiência / menor consumo) |
+| Prata | [10, 30) |
+| Bronze | [30, 60) |
+| Cobre | [60, 90) |
+| Ferro | [90, 100] (pior eficiência / maior desperdício) |
 
 > O TAP original citava apenas Ferro, Bronze, Prata e Ouro. A versão mais recente adiciona **Cobre**. Usar cinco ligas.
 
