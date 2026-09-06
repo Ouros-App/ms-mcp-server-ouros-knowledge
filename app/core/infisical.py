@@ -8,10 +8,11 @@ def load_infisical_secrets() -> None:
     load_dotenv()
     token = os.getenv("INFISICAL_TOKEN")
     project_id = os.getenv("INFISICAL_PROJECT_ID")
+    environment = os.getenv("INFISICAL_ENV")
     secret_path = os.getenv("INFISICAL_PATH")
-    if not any((token, project_id, secret_path)):
+    if not any((token, project_id, environment, secret_path)):
         return
-    if not all((token, project_id, secret_path)):
+    if not all((token, project_id, environment, secret_path)):
         raise RuntimeError(
             "INFISICAL_TOKEN, INFISICAL_PROJECT_ID e INFISICAL_PATH devem ser configurados juntos"
         )
@@ -21,7 +22,7 @@ def load_infisical_secrets() -> None:
     )
     response = client.secrets.list_secrets(
         project_id=project_id,
-        environment_slug=os.getenv("INFISICAL_ENV", "prod"),
+        environment_slug=environment,
         secret_path=secret_path,
         view_secret_value=True,
     )
