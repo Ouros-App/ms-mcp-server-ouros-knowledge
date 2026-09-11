@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "files": {
+    "ouros_ai_knowledge_guide.md": {
+      "sha256": "451aa150a5b33253ab106d7a1a1b3ac635676f10a3252906f045f1e727b8f270",
+      "collection": "ouros_knowledge",
+      "embedding_model": "nvidia/nemotron-3-embed-1b",
+      "chunk_size": 1000,
+      "chunk_overlap": 150,
+      "chunk_count": 23,
+      "ids": [
+        "b6c31cb3-61e6-5a90-be9e-fb054fba6b5f",
+        "0b93f7a2-7bc4-512d-bce2-167c20bade48",
+        "c5002811-3c5b-5aed-a854-94569dbd441b",
+        "b3fb500e-677d-55ca-91a4-9aa1ffb85192",
+        "993c46d0-4665-5f19-934f-d438b6da6e58",
+        "76b818a7-b24b-5ec1-8198-39fab4aa23d2",
+        "6eb0f29f-ef3e-580f-99e1-c7125c117cf2",
+        "4632b080-1d38-5260-a137-7e338c34dcd4",
+        "683b4942-af13-55f5-9915-f17e20822a89",
+        "a6a283c6-92ea-50f9-ae42-0efa187ca1e0",
+        "88b02022-e86c-523b-baad-c4dbd31c66dd",
+        "a8266c48-12d4-535d-a7d6-e5504c48b890",
+        "65435feb-8c75-5e33-9ec6-68cbcbb4d9d6",
+        "31393ae2-8416-54d8-83ea-600927492be3",
+        "86248fb7-ad44-5efa-889a-d5a62489eca4",
+        "456e69d1-693e-580e-a6e4-c233125507f4",
+        "6ba1fca7-4e5b-507d-99ee-a8054c0ab103",
+        "89a2db2b-a123-58da-9ae3-d3cbf67b1a86",
+        "fa8892bd-4a12-5aec-a95c-667349a3f39f",
+        "4f5f07ce-8366-5c20-809e-caf98cdda141",
+        "8318f80f-9441-551f-9799-439aff2cf087",
+        "73e151ca-14aa-5358-80e9-814c3441fc1a",
+        "6f7e84ea-25ea-5955-b108-11bbb2307e82"
+      ]
+    }
+  },
+  "collection": "ouros_knowledge",
+  "embedding_model": "nvidia/nemotron-3-embed-1b",
+  "chunk_size": 1000,
+  "chunk_overlap": 150
+}
