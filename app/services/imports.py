@@ -11,6 +11,10 @@ from pypdf import PdfReader
 from app.core.config import settings
 
 MAX_FILE_BYTES = 8 * 1024 * 1024
+MAX_XLSX_UNCOMPRESSED_BYTES = 128 * 1024 * 1024
+MAX_XLSX_COMPRESSION_RATIO = 100
+MAX_XLSX_ROWS = 10_000
+MAX_XLSX_CELLS = 100_000
 ALLOWED_TYPES = {"application/pdf", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
 
 
@@ -20,20 +24,47 @@ def _xlsx_to_markdown(content: bytes) -> str:
         from openpyxl import load_workbook
     except ImportError as error:
         raise RuntimeError("suporte XLSX não está instalado") from error
+    with zipfile.ZipFile(BytesIO(content)) as archive:
+        uncompressed_size = sum(item.file_size for item in archive.infolist())
+        compressed_size = max(sum(item.compress_size for item in archive.infolist()), 1)
+    if uncompressed_size > MAX_XLSX_UNCOMPRESSED_BYTES:
+        raise ValueError("XLSX excede o limite descompactado")
+    if uncompressed_size / compressed_size > MAX_XLSX_COMPRESSION_RATIO:
+        raise ValueError("taxa de compressão do XLSX excede o limite")
+
     workbook = load_workbook(BytesIO(content), read_only=True, data_only=True)
     sections: list[str] = []
-    for sheet in workbook.worksheets:
-        rows = [["" if value is None else str(value) for value in row]
-                for row in sheet.iter_rows(values_only=True)]
-        rows = [row for row in rows if any(cell.strip() for cell in row)]
-        if not rows:
-            continue
-        width = max(len(row) for row in rows)
-        normalized = [row + [""] * (width - len(row)) for row in rows]
-        sections.append(f"## Planilha: {sheet.title}\n")
-        sections.append("| " + " | ".join(normalized[0]) + " |\n")
-        sections.append("| " + " | ".join(["---"] * width) + " |\n")
-        sections.extend("| " + " | ".join(row) + " |\n" for row in normalized[1:])
+    cell_count = 0
+    total_chars = 0
+    try:
+        for sheet in workbook.worksheets:
+            header: list[str] | None = None
+            sheet_lines: list[str] = []
+            for row_number, values in enumerate(sheet.iter_rows(values_only=True), start=1):
+                if row_number > MAX_XLSX_ROWS:
+                    raise ValueError("XLSX excede o limite de linhas")
+                row = ["" if value is None else str(value) for value in values]
+                cell_count += len(row)
+                if cell_count > MAX_XLSX_CELLS:
+                    raise ValueError("XLSX excede o limite de células")
+                if not any(cell.strip() for cell in row):
+                    continue
+                if header is None:
+                    header = row
+                    sheet_lines.extend((f"## Planilha: {sheet.title}\n", "| " + " | ".join(row) + " |\n", "| " + " | ".join(["---"] * len(row)) + " |\n"))
+                    total_chars += sum(map(len, sheet_lines[-3:]))
+                    if total_chars > settings.IMPORT_MARKDOWN_MAX_CHARS:
+                        raise ValueError("documento convertido excede o limite de importação")
+                    continue
+                normalized = row[:len(header)] + [""] * max(0, len(header) - len(row))
+                line = "| " + " | ".join(normalized) + " |\n"
+                sheet_lines.append(line)
+                total_chars += len(line)
+                if total_chars > settings.IMPORT_MARKDOWN_MAX_CHARS:
+                    raise ValueError("documento convertido excede o limite de importação")
+            sections.extend(sheet_lines)
+    finally:
+        workbook.close()
     return "\n".join(sections)
 
 
@@ -66,7 +97,9 @@ def file_to_markdown(filename: str, content_type: str, encoded_file: str) -> str
         markdown = _xlsx_to_markdown(content)
     if not markdown.strip():
         raise ValueError("não foi possível extrair texto do arquivo")
-    return markdown[: settings.IMPORT_MARKDOWN_MAX_CHARS]
+    if len(markdown) > settings.IMPORT_MARKDOWN_MAX_CHARS:
+        raise ValueError("documento convertido excede o limite de importação")
+    return markdown
 
 
 def extract_resource_records(markdown: str, source_name: str) -> dict[str, Any]:

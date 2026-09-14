@@ -159,6 +159,8 @@ Authorization: Bearer <MCP_AUTH_TOKEN>
 | `postgres_status` | nenhum | Testa a conexão PostgreSQL e informa database e usuário conectados. |
 | `get_user_context` | `user_type`, `user_id` | Retorna perfil e empresas/farms que pertencem ao escopo do usuário. |
 | `get_user_farm_data` | `user_type`, `user_id`, `limit` opcional entre 1 e 100 | Retorna farms, metas, consumos, lotes e dicas limitados ao escopo do usuário. |
+| `prepare_resource_import` | `user_type`, `user_id`, `filename`, `content_type`, `encoded_file` | Disponível apenas para `farm_owner`; converte PDF/XLSX e retorna uma prévia para revisão, sem gravar. |
+| `import_user_resource_records` | `user_type`, `user_id`, `request_id`, `source_type`, `source_name`, `records`, `confirmation` | Disponível apenas para `farm_owner`; exige `request_id` UUID e confirmação explícita antes de gravar os registros. |
 
 Os valores aceitos para `user_type` são `farm_owner`, `company_employee` e `admin`. O `user_id` deve ser positivo.
 

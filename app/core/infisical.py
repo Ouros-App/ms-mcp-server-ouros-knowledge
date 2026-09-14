@@ -14,7 +14,7 @@ def load_infisical_secrets() -> None:
         return
     if not all((token, project_id, environment, secret_path)):
         raise RuntimeError(
-            "INFISICAL_TOKEN, INFISICAL_PROJECT_ID e INFISICAL_PATH devem ser configurados juntos"
+            "INFISICAL_TOKEN, INFISICAL_PROJECT_ID, INFISICAL_ENV e INFISICAL_PATH devem ser configurados juntos"
         )
     client = InfisicalSDKClient(
         host=os.getenv("INFISICAL_HOST", "https://app.infisical.com"),

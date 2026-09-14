@@ -9,13 +9,13 @@ from app.core.infisical import load_infisical_secrets
 class InfisicalTests(unittest.TestCase):
     @patch.dict(os.environ, {}, clear=True)
     def test_without_configuration_does_nothing(self) -> None:
-        with patch("app.core.infisical.InfisicalSDKClient") as client:
+        with patch("app.core.infisical.load_dotenv"), patch("app.core.infisical.InfisicalSDKClient") as client:
             load_infisical_secrets()
         client.assert_not_called()
 
     @patch.dict(os.environ, {"INFISICAL_TOKEN": "token"}, clear=True)
     def test_partial_configuration_fails(self) -> None:
-        with self.assertRaisesRegex(RuntimeError, "devem ser configurados juntos"):
+        with patch("app.core.infisical.load_dotenv"), self.assertRaisesRegex(RuntimeError, "devem ser configurados juntos"):
             load_infisical_secrets()
 
     @patch.dict(
@@ -36,6 +36,6 @@ class InfisicalTests(unittest.TestCase):
                 )
             )
         )
-        with patch("app.core.infisical.InfisicalSDKClient", return_value=client):
+        with patch("app.core.infisical.load_dotenv"), patch("app.core.infisical.InfisicalSDKClient", return_value=client):
             load_infisical_secrets()
         self.assertEqual(os.environ["APP_SECRET"], "ok")

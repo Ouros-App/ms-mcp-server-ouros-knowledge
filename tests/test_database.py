@@ -77,7 +77,7 @@ class DatabaseGuardTests(unittest.TestCase):
         self.assertEqual(connect.call_count, 1)
 
     def test_import_resource_records_rejects_unsupported_input_before_connecting(self) -> None:
-        with patch("app.services.database._connect") as connect:
+        with patch("app.services.database._connect_import") as connect:
             with self.assertRaises(ValueError):
                 import_resource_records("company_employee", 42, "abc", "excel", "x", [])  # type: ignore[arg-type]
             connect.assert_not_called()

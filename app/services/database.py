@@ -1,5 +1,6 @@
 from datetime import date, datetime, time
 from decimal import Decimal
+import json
 from typing import Any, Literal
 from uuid import UUID
 
@@ -88,9 +89,10 @@ def import_resource_records(
         raise ValueError("records deve ser uma lista com no máximo 1000 itens")
     if any(not isinstance(record, dict) for record in records):
         raise ValueError("cada registro deve ser um objeto JSON")
-    payload = Jsonb(records)
-    if len(str(payload.obj).encode("utf-8")) > 1024 * 1024:
+    serialized_payload = json.dumps(records)
+    if len(serialized_payload.encode("utf-8")) > 1024 * 1024:
         raise ValueError("payload de importação excede 1 MiB")
+    payload = Jsonb(records, dumps=lambda _value: serialized_payload)
 
     with _connect_import() as connection:
         row = connection.execute(
