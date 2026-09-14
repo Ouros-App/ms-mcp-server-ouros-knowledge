@@ -136,5 +136,5 @@ def prepare_resource_import(
     """
     if not filename.strip():
         raise ValueError("filename não pode ser vazio")
-    markdown = file_to_markdown(filename.strip(), content_type, encoded_file)
+    markdown = file_to_markdown(content_type, encoded_file)
     return extract_resource_records(markdown, filename.strip())

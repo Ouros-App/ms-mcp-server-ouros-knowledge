@@ -16,6 +16,30 @@ MAX_XLSX_COMPRESSION_RATIO = 100
 MAX_XLSX_ROWS = 10_000
 MAX_XLSX_CELLS = 100_000
 ALLOWED_TYPES = {"application/pdf", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
+DOCUMENT_TOO_LARGE = "documento convertido excede o limite de importação"
+
+
+def _xlsx_sheet_lines(sheet: Any):
+    """Yield bounded Markdown lines for one worksheet."""
+    header: list[str] | None = None
+    cell_count = 0
+    for row_number, values in enumerate(sheet.iter_rows(values_only=True), start=1):
+        if row_number > MAX_XLSX_ROWS:
+            raise ValueError("XLSX excede o limite de linhas")
+        row = ["" if value is None else str(value) for value in values]
+        cell_count += len(row)
+        if cell_count > MAX_XLSX_CELLS:
+            raise ValueError("XLSX excede o limite de células")
+        if not any(cell.strip() for cell in row):
+            continue
+        if header is None:
+            header = row
+            yield f"## Planilha: {sheet.title}\n"
+            yield "| " + " | ".join(row) + " |\n"
+            yield "| " + " | ".join(["---"] * len(row)) + " |\n"
+            continue
+        normalized = row[:len(header)] + [""] * max(0, len(header) - len(row))
+        yield "| " + " | ".join(normalized) + " |\n"
 
 
 def _xlsx_to_markdown(content: bytes) -> str:
@@ -34,35 +58,14 @@ def _xlsx_to_markdown(content: bytes) -> str:
 
     workbook = load_workbook(BytesIO(content), read_only=True, data_only=True)
     sections: list[str] = []
-    cell_count = 0
     total_chars = 0
     try:
         for sheet in workbook.worksheets:
-            header: list[str] | None = None
-            sheet_lines: list[str] = []
-            for row_number, values in enumerate(sheet.iter_rows(values_only=True), start=1):
-                if row_number > MAX_XLSX_ROWS:
-                    raise ValueError("XLSX excede o limite de linhas")
-                row = ["" if value is None else str(value) for value in values]
-                cell_count += len(row)
-                if cell_count > MAX_XLSX_CELLS:
-                    raise ValueError("XLSX excede o limite de células")
-                if not any(cell.strip() for cell in row):
-                    continue
-                if header is None:
-                    header = row
-                    sheet_lines.extend((f"## Planilha: {sheet.title}\n", "| " + " | ".join(row) + " |\n", "| " + " | ".join(["---"] * len(row)) + " |\n"))
-                    total_chars += sum(map(len, sheet_lines[-3:]))
-                    if total_chars > settings.IMPORT_MARKDOWN_MAX_CHARS:
-                        raise ValueError("documento convertido excede o limite de importação")
-                    continue
-                normalized = row[:len(header)] + [""] * max(0, len(header) - len(row))
-                line = "| " + " | ".join(normalized) + " |\n"
-                sheet_lines.append(line)
+            for line in _xlsx_sheet_lines(sheet):
                 total_chars += len(line)
                 if total_chars > settings.IMPORT_MARKDOWN_MAX_CHARS:
-                    raise ValueError("documento convertido excede o limite de importação")
-            sections.extend(sheet_lines)
+                    raise ValueError(DOCUMENT_TOO_LARGE)
+                sections.append(line)
     finally:
         workbook.close()
     return "\n".join(sections)
@@ -77,13 +80,13 @@ def _pdf_to_markdown(content: bytes) -> str:
     )
 
 
-def file_to_markdown(filename: str, content_type: str, encoded_file: str) -> str:
+def file_to_markdown(content_type: str, encoded_file: str) -> str:
     """Decode and convert one supported PDF/XLSX upload to Markdown."""
     if content_type not in ALLOWED_TYPES:
         raise ValueError("tipo de arquivo não suportado; use PDF ou XLSX")
     try:
         content = base64.b64decode(encoded_file, validate=True)
-    except (binascii.Error, ValueError) as error:
+    except binascii.Error as error:
         raise ValueError("arquivo deve ser base64 válido") from error
     if not content or len(content) > MAX_FILE_BYTES:
         raise ValueError("arquivo vazio ou maior que 8 MiB")
@@ -98,7 +101,7 @@ def file_to_markdown(filename: str, content_type: str, encoded_file: str) -> str
     if not markdown.strip():
         raise ValueError("não foi possível extrair texto do arquivo")
     if len(markdown) > settings.IMPORT_MARKDOWN_MAX_CHARS:
-        raise ValueError("documento convertido excede o limite de importação")
+        raise ValueError(DOCUMENT_TOO_LARGE)
     return markdown
 
 
@@ -129,5 +132,5 @@ def extract_resource_records(markdown: str, source_name: str) -> dict[str, Any]:
         if not isinstance(records, list):
             raise TypeError("NIM não retornou uma lista de records")
         return {"source_name": source_name, "records": records, "preview": True}
-    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+    except (KeyError, TypeError, ValueError) as error:
         raise RuntimeError("resposta inválida do NVIDIA NIM") from error

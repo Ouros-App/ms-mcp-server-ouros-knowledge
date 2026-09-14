@@ -20,7 +20,6 @@ class ImportTests(unittest.TestCase):
 
     def test_converts_xlsx_incrementally(self) -> None:
         markdown = file_to_markdown(
-            "historico.xlsx",
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             self._xlsx([["data", "consumo"], ["2025-01-01", "12"]]),
         )
@@ -32,7 +31,6 @@ class ImportTests(unittest.TestCase):
             self.assertRaisesRegex(ValueError, "excede o limite"),
         ):
             file_to_markdown(
-                "historico.xlsx",
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 self._xlsx([["data", "consumo"], ["2025-01-01", "12"]]),
             )
@@ -41,7 +39,29 @@ class ImportTests(unittest.TestCase):
         encoded = base64.b64encode(b"not-xlsx").decode()
         with self.assertRaisesRegex(ValueError, "assinatura de XLSX"):
             file_to_markdown(
-                "historico.xlsx",
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 encoded,
             )
+
+    def test_rejects_invalid_content_and_base64(self) -> None:
+        with self.assertRaisesRegex(ValueError, "tipo de arquivo"):
+            file_to_markdown("text/plain", "aA==")
+        with self.assertRaisesRegex(ValueError, "base64"):
+            file_to_markdown("application/pdf", "not-base64")
+
+    def test_rejects_xlsx_expansion_limits(self) -> None:
+        encoded = self._xlsx([["data"], ["2025-01-01"]])
+        cases = (
+            ("MAX_XLSX_UNCOMPRESSED_BYTES", "descompactado"),
+            ("MAX_XLSX_COMPRESSION_RATIO", "compressão"),
+            ("MAX_XLSX_ROWS", "linhas"),
+            ("MAX_XLSX_CELLS", "células"),
+        )
+        for constant, message in cases:
+            with self.subTest(constant=constant), patch(
+                f"app.services.imports.{constant}", 0
+            ), self.assertRaisesRegex(ValueError, message):
+                file_to_markdown(
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    encoded,
+                )
