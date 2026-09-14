@@ -1,11 +1,26 @@
 import base64
+import json
 import unittest
 from io import BytesIO
 from unittest.mock import patch
 
 from openpyxl import Workbook
 
-from app.services.imports import file_to_markdown
+from app.services.imports import extract_resource_records, file_to_markdown
+
+
+class FakeResponse:
+    def __init__(self, body: dict[str, object]) -> None:
+        self.body = body
+
+    def __enter__(self) -> "FakeResponse":
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        return None
+
+    def read(self) -> bytes:
+        return json.dumps(self.body).encode()
 
 
 class ImportTests(unittest.TestCase):
@@ -48,6 +63,30 @@ class ImportTests(unittest.TestCase):
             file_to_markdown("text/plain", "aA==")
         with self.assertRaisesRegex(ValueError, "base64"):
             file_to_markdown("application/pdf", "not-base64")
+        with self.assertRaisesRegex(ValueError, "assinatura de PDF"):
+            file_to_markdown("application/pdf", base64.b64encode(b"not-pdf").decode())
+
+    def test_extracts_records_from_nim(self) -> None:
+        body = {"choices": [{"message": {"content": json.dumps({"records": []})}}]}
+        response = FakeResponse(body)
+        with (
+            patch("app.services.imports.settings.NVIDIA_API_KEY", "token"),
+            patch("app.services.imports.settings.NVIDIA_NIM_URL", "https://nim"),
+            patch("app.services.imports.urlopen", return_value=response),
+        ):
+            result = extract_resource_records("# documento", "historico.xlsx")
+        self.assertEqual(result["records"], [])
+
+    def test_rejects_invalid_nim_records(self) -> None:
+        body = {"choices": [{"message": {"content": json.dumps({"records": {}})}}]}
+        response = FakeResponse(body)
+        with (
+            patch("app.services.imports.settings.NVIDIA_API_KEY", "token"),
+            patch("app.services.imports.settings.NVIDIA_NIM_URL", "https://nim"),
+            patch("app.services.imports.urlopen", return_value=response),
+            self.assertRaisesRegex(RuntimeError, "resposta inválida"),
+        ):
+            extract_resource_records("# documento", "historico.xlsx")
 
     def test_rejects_xlsx_expansion_limits(self) -> None:
         encoded = self._xlsx([["data"], ["2025-01-01"]])
