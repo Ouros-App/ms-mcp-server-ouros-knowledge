@@ -2,6 +2,7 @@ import base64
 import json
 import unittest
 from io import BytesIO
+from typing import Self
 from unittest.mock import patch
 
 from openpyxl import Workbook
@@ -13,7 +14,7 @@ class FakeResponse:
     def __init__(self, body: dict[str, object]) -> None:
         self.body = body
 
-    def __enter__(self) -> "FakeResponse":
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *_args: object) -> None:
