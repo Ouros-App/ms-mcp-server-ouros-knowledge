@@ -27,13 +27,15 @@ class ImportTests(unittest.TestCase):
         self.assertIn("2025-01-01", markdown)
 
     def test_rejects_markdown_overflow(self) -> None:
-        with patch("app.services.imports.settings.IMPORT_MARKDOWN_MAX_CHARS", 10):
-            with self.assertRaisesRegex(ValueError, "excede o limite"):
-                file_to_markdown(
-                    "historico.xlsx",
-                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    self._xlsx([["data", "consumo"], ["2025-01-01", "12"]]),
-                )
+        with (
+            patch("app.services.imports.settings.IMPORT_MARKDOWN_MAX_CHARS", 10),
+            self.assertRaisesRegex(ValueError, "excede o limite"),
+        ):
+            file_to_markdown(
+                "historico.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                self._xlsx([["data", "consumo"], ["2025-01-01", "12"]]),
+            )
 
     def test_rejects_invalid_xlsx_signature(self) -> None:
         encoded = base64.b64encode(b"not-xlsx").decode()
