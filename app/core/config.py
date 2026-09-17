@@ -6,6 +6,8 @@ load_infisical_secrets()
 
 
 class Settings(BaseSettings):
+    """Application settings loaded after the optional Infisical bootstrap."""
+
     PROJECT_NAME: str = "Ouros Knowledge MCP"
     DESCRIPTION: str = "FastAPI and MCP server for Qdrant knowledge retrieval."
     VERSION: str = "0.1.0"

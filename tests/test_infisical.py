@@ -52,6 +52,8 @@ class InfisicalTests(unittest.TestCase):
         clear=True,
     )
     def test_loads_secrets_before_settings_initialization(self) -> None:
+        """Ensure Infisical secrets are loaded before Settings is instantiated."""
+
         client = SimpleNamespace(
             secrets=SimpleNamespace(
                 list_secrets=lambda **_kwargs: SimpleNamespace(
