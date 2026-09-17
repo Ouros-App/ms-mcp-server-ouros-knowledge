@@ -52,8 +52,6 @@ class InfisicalTests(unittest.TestCase):
         clear=True,
     )
     def test_loads_secrets_before_settings_initialization(self) -> None:
-        from app.core import config
-
         client = SimpleNamespace(
             secrets=SimpleNamespace(
                 list_secrets=lambda **_kwargs: SimpleNamespace(
@@ -64,6 +62,8 @@ class InfisicalTests(unittest.TestCase):
         with patch("app.core.infisical.load_dotenv"), patch(
             "app.core.infisical.InfisicalSDKClient", return_value=client
         ):
+            from app.core import config
+
             importlib.reload(config)
 
         self.assertEqual(config.settings.MCP_AUTH_TOKEN, "loaded-token")
