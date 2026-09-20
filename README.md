@@ -83,7 +83,10 @@ Preencha os valores necessários no `.env`:
 | `MIDAS_DATABASE_URL` | vazio | URL de conexão PostgreSQL somente leitura do MIDAS. |
 | `MIDAS_IMPORT_DATABASE_URL` | vazio | URL exclusiva da role `midas_importer`, com `EXECUTE` apenas na função de importação. |
 | `MIDAS_DB_CONNECT_TIMEOUT` | `10` | Timeout da conexão PostgreSQL, em segundos. |
-| `MCP_AUTH_TOKEN` | vazio | Token Bearer usado para autenticar clientes MCP. |
+| `MCP_AUTH_TOKEN` | vazio | Token Bearer legado, mantido apenas como fallback temporário de rollout. |
+| `MCP_JWT_ISSUER` | `https://ouros-keycloak.discloud.app/realms/ouros` | Issuer do realm usado na validação RS256/JWKS. |
+| `MCP_JWT_AUDIENCE` | `ms-mcp-server-ouros-knowledge` | Audience obrigatória no access token. |
+| `MCP_JWKS_URL` | derivado do issuer | Endpoint JWKS; pode ser sobrescrito explicitamente. |
 | `MCP_RESOURCE_URL` | `http://localhost:8000/mcp` | URL base do recurso MCP; em produção, use a URL pública. |
 
 Exemplo mínimo:
