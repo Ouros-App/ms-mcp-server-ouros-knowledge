@@ -84,7 +84,9 @@ Preencha os valores necessários no `.env`:
 | `MIDAS_IMPORT_DATABASE_URL` | vazio | URL exclusiva da role `midas_importer`, com `EXECUTE` apenas na função de importação. |
 | `MIDAS_DB_CONNECT_TIMEOUT` | `10` | Timeout da conexão PostgreSQL, em segundos. |
 | `MCP_AUTH_TOKEN` | vazio | Token Bearer usado para autenticar clientes MCP. |
-| `MCP_RESOURCE_URL` | `http://localhost:8000/mcp` | URL base do recurso MCP; em produção, use a URL pública. |
+| `MCP_JWT_ISSUER`, `MCP_JWT_AUDIENCE` e `MCP_JWKS_URL` configuram a validação RS256/JWKS do Keycloak. A audience oficial é `ms-mcp-server-ouros-knowledge`.
+
+`MCP_RESOURCE_URL` | `http://localhost:8000/mcp` | URL base do recurso MCP; em produção, use a URL pública. |
 
 Exemplo mínimo:
 
