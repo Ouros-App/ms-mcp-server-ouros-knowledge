@@ -65,13 +65,28 @@ def _identity_from_claims(claims: dict) -> tuple[str, int] | None:
     database_id = claims.get("database_id")
     account_type = claims.get("account_type")
     realm_access = claims.get("realm_access")
-    roles = realm_access.get("roles", []) if isinstance(realm_access, dict) else []
+    roles = realm_access.get("roles") if isinstance(realm_access, dict) else None
 
-    if account_type not in VALID_USER_TYPES or account_type not in roles:
+    if (
+        not isinstance(account_type, str)
+        or account_type not in VALID_USER_TYPES
+        or not isinstance(roles, list)
+        or not all(isinstance(role, str) for role in roles)
+        or account_type not in roles
+    ):
         return None
-    try:
+
+    if isinstance(database_id, bool):
+        return None
+    if isinstance(database_id, int):
+        numeric_database_id = database_id
+    elif (
+        isinstance(database_id, str)
+        and database_id.isascii()
+        and database_id.isdecimal()
+    ):
         numeric_database_id = int(database_id)
-    except (TypeError, ValueError):
+    else:
         return None
     if numeric_database_id <= 0:
         return None
