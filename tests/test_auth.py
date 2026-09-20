@@ -130,6 +130,33 @@ class AuthTests(unittest.IsolatedAsyncioTestCase):
                 }
             )
         )
+        self.assertIsNone(
+            _identity_from_claims(
+                {
+                    "database_id": True,
+                    "account_type": "farm_owner",
+                    "realm_access": {"roles": ["farm_owner"]},
+                }
+            )
+        )
+        self.assertIsNone(
+            _identity_from_claims(
+                {
+                    "database_id": 42.9,
+                    "account_type": "farm_owner",
+                    "realm_access": {"roles": ["farm_owner"]},
+                }
+            )
+        )
+        self.assertIsNone(
+            _identity_from_claims(
+                {
+                    "database_id": 42,
+                    "account_type": "farm_owner",
+                    "realm_access": {"roles": "farm_owner"},
+                }
+            )
+        )
         self.assertEqual(
             _identity_from_claims(
                 {
