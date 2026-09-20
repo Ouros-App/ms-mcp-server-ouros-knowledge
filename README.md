@@ -68,6 +68,8 @@ Preencha os valores necessários no `.env`:
 | --- | --- | --- |
 | `APP_PORT` | `8000` | Porta em que o Uvicorn escuta. |
 | `APP_NAME` | `ouros_knowledge_mcp` | Nome usado pelos scripts Docker. |
+| `INFISICAL_TOKEN` / `INFISICAL_PROJECT_ID` / `INFISICAL_ENV` / `INFISICAL_PATH` | vazio | Bootstrap opcional do Infisical. Configure as quatro juntas; `INFISICAL_ENV` aceita `prod` ou `dev`. |
+| `INFISICAL_HOST` | `https://app.infisical.com` | Host do Infisical. |
 | `PROJECT_NAME` | `Ouros Knowledge MCP` | Nome exibido pela API e pelo servidor MCP. |
 | `DESCRIPTION` | — | Descrição exibida no OpenAPI. |
 | `VERSION` | `0.1.0` | Versão exposta pela API. |
@@ -109,6 +111,9 @@ MCP_RESOURCE_URL=http://localhost:8000/mcp
 
 Cuidados importantes:
 
+- Em deploy, mantenha `INFISICAL_TOKEN` como o único bootstrap secreto externo ao cofre. `INFISICAL_PROJECT_ID`, `INFISICAL_ENV`, `INFISICAL_PATH` e `INFISICAL_HOST` são configuração.
+- Os secrets de aplicação esperados no Infisical incluem `QDRANT_API_KEY`, `NVIDIA_API_KEY`, `MIDAS_DATABASE_URL`, `MIDAS_IMPORT_DATABASE_URL` e `MCP_AUTH_TOKEN`.
+- Quando o Infisical está configurado, os secrets do cofre são carregados antes de `Settings` e prevalecem sobre valores locais com a mesma chave. Sem nenhuma variável de bootstrap, o modo local continua permitido; configuração parcial ou ambiente inválido interrompe o startup.
 - Use o mesmo `NVIDIA_EMBEDDING_MODEL` utilizado para criar os vetores da coleção Qdrant.
 - A coleção Qdrant precisa existir antes da busca ou da ingestão.
 - Gere `MCP_AUTH_TOKEN` aleatoriamente, com pelo menos 32 caracteres.
