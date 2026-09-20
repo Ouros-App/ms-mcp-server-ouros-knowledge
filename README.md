@@ -39,7 +39,7 @@ FastAPI /mcp/
 - Busca semântica com `search_knowledge(query, limit)`.
 - Diagnóstico da coleção Qdrant com `qdrant_status()`.
 - Diagnóstico da conexão PostgreSQL com `postgres_status()`.
-- Contexto personalizado com `get_user_context(...)` e `get_user_farm_data(...)`.
+- Contexto personalizado com `get_user_context()` e `get_user_farm_data(limit)`.
 - CLI para extrair, dividir, embeddar e sincronizar documentos com o Qdrant.
 - Ingestão incremental baseada em SHA-256, modelo, coleção e parâmetros de chunking.
 - Endpoints REST de disponibilidade e saúde.
@@ -154,7 +154,7 @@ O Swagger documenta somente as rotas REST. As tools MCP aparecem no handshake e 
 Todas as chamadas MCP devem enviar:
 
 ```http
-Authorization: Bearer <MCP_AUTH_TOKEN>
+Authorization: Bearer <KEYCLOAK_ACCESS_TOKEN>
 ```
 
 | Tool | Parâmetros | Comportamento |
@@ -164,7 +164,7 @@ Authorization: Bearer <MCP_AUTH_TOKEN>
 | `postgres_status` | nenhum | Testa a conexão PostgreSQL e informa database e usuário conectados. |
 | `get_user_context` | nenhum | Retorna perfil e empresas/farms da identidade assinada no JWT. |
 | `get_user_farm_data` | `limit` opcional entre 1 e 100 | Retorna farms, metas, consumos, lotes e dicas da identidade assinada no JWT. |
-| `prepare_resource_import` | `user_type`, `user_id`, `filename`, `content_type`, `encoded_file` | Disponível apenas para `farm_owner`; converte PDF/XLSX e retorna uma prévia para revisão, sem gravar. |
+| `prepare_resource_import` | `filename`, `content_type`, `encoded_file` | Disponível apenas para `farm_owner`; converte PDF/XLSX e retorna uma prévia para revisão, sem gravar. |
 | `import_user_resource_records` | `request_id`, `source_type`, `source_name`, `records` | Disponível apenas para `farm_owner`; exige `request_id` UUID e confirmação explícita antes de gravar os registros. |
 
 Os tipos de conta aceitos continuam sendo `farm_owner`, `company_employee` e `admin`, mas são lidos do JWT, não enviados pelo cliente.
