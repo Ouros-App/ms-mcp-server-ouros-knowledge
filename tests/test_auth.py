@@ -2,7 +2,12 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from app.services.auth import StaticTokenVerifier, get_authenticated_identity
+from app.core.config import settings
+from app.services.auth import (
+    KeycloakOrStaticTokenVerifier,
+    StaticTokenVerifier,
+    get_authenticated_identity,
+)
 
 
 class AuthTests(unittest.IsolatedAsyncioTestCase):
@@ -22,10 +27,49 @@ class AuthTests(unittest.IsolatedAsyncioTestCase):
         verifier = StaticTokenVerifier(self.token)
 
         self.assertIsNone(await verifier.verify_token("wrong-token"))
-        self.assertIsNone(await StaticTokenVerifier("short").verify_token("short"))
+        self.assertIsNone(
+            await StaticTokenVerifier("short").verify_token("short")
+        )
+
+    async def test_keycloak_token_returns_signed_business_claims(self) -> None:
+        claims = {
+            "sub": "keycloak-subject",
+            "database_id": 42,
+            "account_type": "farm_owner",
+            "realm_access": {"roles": ["farm_owner"]},
+            "scope": "openid ouros-identity",
+            "exp": 2_147_483_647,
+        }
+
+        with (
+            patch.object(
+                settings,
+                "MCP_JWT_ISSUER",
+                "https://ouros-keycloak.discloud.app/realms/ouros",
+            ),
+            patch.object(
+                settings,
+                "MCP_JWT_AUDIENCE",
+                "ms-mcp-server-ouros-knowledge",
+            ),
+            patch(
+                "app.services.auth._decode_keycloak_token",
+                return_value=claims,
+            ),
+        ):
+            verifier = KeycloakOrStaticTokenVerifier(static_token=None)
+            access_token = await verifier.verify_token("signed-token")
+
+        self.assertIsNotNone(access_token)
+        assert access_token is not None
+        self.assertEqual(access_token.subject, "keycloak-subject")
+        self.assertEqual(access_token.claims["database_id"], 42)
 
     @patch("app.services.auth.get_access_token")
-    def test_identity_is_validated_after_authentication(self, get_access_token) -> None:
+    def test_identity_is_validated_after_authentication(
+        self,
+        get_access_token,
+    ) -> None:
         get_access_token.return_value = SimpleNamespace(claims={})
 
         self.assertEqual(
@@ -33,17 +77,59 @@ class AuthTests(unittest.IsolatedAsyncioTestCase):
             ("company_employee", 7),
         )
 
+    @patch("app.services.auth.get_access_token")
+    def test_identity_is_derived_from_keycloak_claims(
+        self,
+        get_access_token,
+    ) -> None:
+        get_access_token.return_value = SimpleNamespace(
+            claims={
+                "database_id": 42,
+                "account_type": "farm_owner",
+                "realm_access": {"roles": ["farm_owner"]},
+            }
+        )
+
+        self.assertEqual(
+            get_authenticated_identity(),
+            ("farm_owner", 42),
+        )
+
+    @patch("app.services.auth.get_access_token")
+    def test_keycloak_identity_rejects_spoofed_tool_arguments(
+        self,
+        get_access_token,
+    ) -> None:
+        get_access_token.return_value = SimpleNamespace(
+            claims={
+                "database_id": 42,
+                "account_type": "farm_owner",
+                "realm_access": {"roles": ["farm_owner"]},
+            }
+        )
+
+        with self.assertRaises(PermissionError):
+            get_authenticated_identity("admin", 42)
+        with self.assertRaises(PermissionError):
+            get_authenticated_identity("farm_owner", 99)
+
     @patch("app.services.auth.get_access_token", return_value=None)
-    def test_missing_token_requires_authentication(self, _get_access_token) -> None:
+    def test_missing_token_requires_authentication(
+        self,
+        _get_access_token,
+    ) -> None:
         with self.assertRaises(PermissionError):
             get_authenticated_identity("farm_owner", 42)
 
     @patch("app.services.auth.get_access_token")
-    def test_invalid_identity_requires_authentication(self, get_access_token) -> None:
+    def test_invalid_identity_requires_authentication(
+        self,
+        get_access_token,
+    ) -> None:
         get_access_token.return_value = SimpleNamespace(claims={})
 
         with self.assertRaises(PermissionError):
-            get_authenticated_identity("unknown", 42)  # type: ignore[arg-type]
+            get_authenticated_identity("unknown", 42)
         with self.assertRaises(PermissionError):
             get_authenticated_identity("farm_owner", 0)
 
