@@ -20,7 +20,7 @@ O serviço conecta um cliente MCP a duas fontes de informação:
 - Qdrant, para recuperar trechos semanticamente relevantes de documentos;
 - PostgreSQL do MIDAS, para retornar perfil, empresas, farms e dados operacionais associados ao usuário.
 
-O servidor não oferece SQL arbitrário. As consultas PostgreSQL são fixas no código e devem ser executadas com uma credencial de leitura. A autenticação do transporte MCP usa um token Bearer configurado no ambiente; a identidade MIDAS é informada em cada chamada das tools de contexto e validada antes da consulta.
+O servidor não oferece SQL arbitrário. As consultas PostgreSQL são fixas no código e devem ser executadas com uma credencial de leitura. Em produção, o transporte MCP valida o JWT do Keycloak por JWKS, issuer e audience. Os claims `database_id` e `account_type` são a identidade autoritativa; `MCP_AUTH_TOKEN` permanece apenas como fallback de rollout.
 
 Fluxo principal:
 
@@ -81,8 +81,11 @@ Preencha os valores necessários no `.env`:
 | `MIDAS_DATABASE_URL` | vazio | URL de conexão PostgreSQL somente leitura do MIDAS. |
 | `MIDAS_IMPORT_DATABASE_URL` | vazio | URL exclusiva da role `midas_importer`, com `EXECUTE` apenas na função de importação. |
 | `MIDAS_DB_CONNECT_TIMEOUT` | `10` | Timeout da conexão PostgreSQL, em segundos. |
-| `MCP_AUTH_TOKEN` | vazio | Token Bearer usado para autenticar clientes MCP. |
+| `MCP_AUTH_TOKEN` | vazio | Bearer compartilhado legado usado somente como fallback de rollout. |
 | `MCP_RESOURCE_URL` | `http://localhost:8000/mcp` | URL base do recurso MCP; em produção, use a URL pública. |
+| `MCP_JWT_ISSUER` | vazio | Issuer do realm Keycloak esperado no JWT. |
+| `MCP_JWT_AUDIENCE` | vazio | Audience deste resource server. |
+| `MCP_JWKS_URL` | vazio | Endpoint JWKS; quando omitido, é derivado do issuer. |
 
 Exemplo mínimo:
 
@@ -146,11 +149,13 @@ O Swagger documenta somente as rotas REST. As tools MCP aparecem no handshake e 
 
 ## Tools MCP
 
-Todas as chamadas MCP devem enviar:
+Todas as chamadas MCP devem enviar um Bearer. Em produção, use o access token emitido pelo Keycloak para a audience deste MCP:
 
 ```http
-Authorization: Bearer <MCP_AUTH_TOKEN>
+Authorization: Bearer <keycloak-access-token>
 ```
+
+Durante o rollout, `MCP_AUTH_TOKEN` continua aceito como fallback.
 
 | Tool | Parâmetros | Comportamento |
 | --- | --- | --- |
@@ -177,7 +182,7 @@ Exemplo de argumentos:
 }
 ```
 
-O token MCP é um segredo service-to-service e possui um único consumidor confiável: o `ms-ai-server`. Os frontends não acessam este MCP diretamente. O `ms-ai-server` autentica o usuário, valida que o `user_id` da requisição corresponde ao usuário autenticado e repassa a identidade ao MCP. O MCP valida o token de serviço e o banco deriva a granja permitida e aplica a autorização final.
+Os frontends não acessam este MCP diretamente. O `ms-ai-server` autentica o usuário e encaminha ao MCP o JWT Keycloak já validado. O MCP valida novamente assinatura, issuer e audience, deriva `database_id`/`account_type` dos claims e exige que os argumentos de identidade das tools coincidam com esses valores. O banco continua derivando o escopo final da granja.
 
 ## Ingestão de documentos
 
