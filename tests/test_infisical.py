@@ -74,7 +74,7 @@ class InfisicalTests(unittest.TestCase):
         client = SimpleNamespace(
             secrets=SimpleNamespace(
                 list_secrets=lambda **_kwargs: SimpleNamespace(
-                    secrets=[SimpleNamespace(secretKey="MCP_AUTH_TOKEN", secretValue="loaded-token")]
+                    secrets=[SimpleNamespace(secretKey="QDRANT_API_KEY", secretValue="loaded-token")]
                 )
             )
         )
@@ -85,4 +85,4 @@ class InfisicalTests(unittest.TestCase):
 
             importlib.reload(config)
 
-        self.assertEqual(config.settings.MCP_AUTH_TOKEN, "loaded-token")
+        self.assertEqual(config.settings.QDRANT_API_KEY, "loaded-token")
