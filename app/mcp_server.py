@@ -4,7 +4,10 @@ from mcp.server.auth.settings import AuthSettings
 from mcp.server.fastmcp import FastMCP
 
 from app.core.config import settings
-from app.services.auth import StaticTokenVerifier, get_authenticated_identity
+from app.services.auth import (
+    KeycloakOrStaticTokenVerifier,
+    get_authenticated_identity,
+)
 from app.services.database import (
     get_user_context as get_database_user_context,
 )
@@ -18,12 +21,10 @@ from app.services.database import (
     postgres_status as get_postgres_status,
 )
 from app.services.imports import extract_resource_records, file_to_markdown
-from app.services.knowledge import (
-    qdrant_status as get_qdrant_status,
-)
-from app.services.knowledge import (
-    search_knowledge as search_qdrant,
-)
+from app.services.knowledge import qdrant_status as get_qdrant_status
+from app.services.knowledge import search_knowledge as search_qdrant
+
+UserType = Literal["farm_owner", "company_employee", "admin"]
 
 mcp = FastMCP(
     name=settings.PROJECT_NAME,
@@ -32,16 +33,17 @@ mcp = FastMCP(
     json_response=True,
     streamable_http_path="/",
     auth=AuthSettings(
-        issuer_url=settings.MCP_RESOURCE_URL,
+        issuer_url=settings.MCP_JWT_ISSUER or settings.MCP_RESOURCE_URL,
         resource_server_url=settings.MCP_RESOURCE_URL,
     ),
-    token_verifier=StaticTokenVerifier(),
+    token_verifier=KeycloakOrStaticTokenVerifier(),
 )
 
 
 @mcp.tool()
 def search_knowledge(
-    query: str, limit: int = settings.SEARCH_TOP_K
+    query: str,
+    limit: int = settings.SEARCH_TOP_K,
 ) -> list[dict[str, Any]]:
     """Search Qdrant using NVIDIA embeddings.
 
@@ -70,56 +72,62 @@ def postgres_status() -> dict[str, Any]:
 
 @mcp.tool()
 def get_user_context(
-    user_type: Literal["farm_owner", "company_employee", "admin"], user_id: int
+    user_type: UserType,
+    user_id: int,
 ) -> dict[str, Any]:
-    """Load a user's profile and linked farms for personalized answers.
+    """Load profile and linked farms for the authenticated MIDAS user.
 
-    Args:
-        user_type: `farm_owner`, `company_employee`, or `admin`.
-        user_id: Positive MIDAS user ID to scope the database queries.
-
-    The identity is validated after the shared MCP token authenticates the client.
+    Keycloak claims are authoritative and must match these compatibility
+    arguments while the legacy client contract remains in place.
     """
-    user_type, user_id = get_authenticated_identity(user_type, user_id)
-    return get_database_user_context(user_type, user_id)
+    authenticated_type, authenticated_id = get_authenticated_identity(
+        user_type,
+        user_id,
+    )
+    return get_database_user_context(authenticated_type, authenticated_id)
 
 
 @mcp.tool()
 def get_user_farm_data(
-    user_type: Literal["farm_owner", "company_employee", "admin"],
+    user_type: UserType,
     user_id: int,
     limit: int = 20,
 ) -> dict[str, Any]:
-    """Load bounded farm data for the requested MIDAS user.
-
-    Args:
-        user_type: `farm_owner`, `company_employee`, or `admin`.
-        user_id: Positive MIDAS user ID to scope the database queries.
-        limit: Maximum number of records per data group, from 1 to 100.
-    """
-    user_type, user_id = get_authenticated_identity(user_type, user_id)
-    return get_database_user_farm_data(user_type, user_id, limit)
+    """Load bounded farm data for the authenticated MIDAS user."""
+    authenticated_type, authenticated_id = get_authenticated_identity(
+        user_type,
+        user_id,
+    )
+    return get_database_user_farm_data(
+        authenticated_type,
+        authenticated_id,
+        limit,
+    )
 
 
 @mcp.tool()
 def import_user_resource_records(
-    user_type: Literal["farm_owner", "company_employee", "admin"],
+    user_type: UserType,
     user_id: int,
     request_id: str,
     source_type: str,
     source_name: str,
     records: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    """Import historical water or energy records through the controlled DB function.
-
-    The database currently authorizes only farm-owner imports and applies the
-    final farm scope, validation, transaction and idempotency checks.
-    """
-    authenticated_type, authenticated_id = get_authenticated_identity(user_type, user_id)
+    """Import historical records using the authenticated business identity."""
+    authenticated_type, authenticated_id = get_authenticated_identity(
+        user_type,
+        user_id,
+    )
     if authenticated_type != "farm_owner":
         raise PermissionError("somente farm_owner pode importar registros")
     return get_database_import_resource_records(
-        authenticated_type, authenticated_id, request_id, source_type, source_name, records
+        authenticated_type,
+        authenticated_id,
+        request_id,
+        source_type,
+        source_name,
+        records,
     )
 
 
@@ -132,7 +140,7 @@ def prepare_resource_import(
     """Convert a PDF/XLSX and use NVIDIA NIM to prepare an import preview.
 
     This tool never writes to PostgreSQL. The returned records must be reviewed
-    and explicitly sent to ``import_user_resource_records`` afterward.
+    and explicitly sent to import_user_resource_records afterward.
     """
     if not filename.strip():
         raise ValueError("filename não pode ser vazio")
