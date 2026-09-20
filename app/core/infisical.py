@@ -5,6 +5,7 @@ from infisical_sdk import InfisicalSDKClient
 
 
 def load_infisical_secrets() -> None:
+    """Load runtime secrets from Infisical before application settings."""
     load_dotenv()
     token = os.getenv("INFISICAL_TOKEN")
     project_id = os.getenv("INFISICAL_PROJECT_ID")
@@ -16,6 +17,8 @@ def load_infisical_secrets() -> None:
         raise RuntimeError(
             "INFISICAL_TOKEN, INFISICAL_PROJECT_ID, INFISICAL_ENV e INFISICAL_PATH devem ser configurados juntos"
         )
+    if environment not in {"prod", "dev"}:
+        raise RuntimeError("INFISICAL_ENV deve ser 'prod' ou 'dev'")
     client = InfisicalSDKClient(
         host=os.getenv("INFISICAL_HOST", "https://app.infisical.com"),
         token=token,
