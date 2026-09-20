@@ -21,12 +21,8 @@ from app.services.database import (
     postgres_status as get_postgres_status,
 )
 from app.services.imports import extract_resource_records, file_to_markdown
-from app.services.knowledge import (
-    qdrant_status as get_qdrant_status,
-)
-from app.services.knowledge import (
-    search_knowledge as search_qdrant,
-)
+from app.services.knowledge import qdrant_status as get_qdrant_status
+from app.services.knowledge import search_knowledge as search_qdrant
 
 UserType = Literal["farm_owner", "company_employee", "admin"]
 
@@ -76,13 +72,13 @@ def postgres_status() -> dict[str, Any]:
 
 @mcp.tool()
 def get_user_context(
-    user_type: UserType | None = None,
-    user_id: int | None = None,
+    user_type: UserType,
+    user_id: int,
 ) -> dict[str, Any]:
-    """Load the authenticated user profile and linked farms.
+    """Load profile and linked farms for the authenticated MIDAS user.
 
-    Keycloak JWT claims are authoritative. user_type and user_id remain
-    optional only for compatibility with the legacy shared MCP token.
+    Keycloak claims are authoritative and must match these compatibility
+    arguments while the legacy client contract remains in place.
     """
     authenticated_type, authenticated_id = get_authenticated_identity(
         user_type,
@@ -93,15 +89,11 @@ def get_user_context(
 
 @mcp.tool()
 def get_user_farm_data(
-    user_type: UserType | None = None,
-    user_id: int | None = None,
+    user_type: UserType,
+    user_id: int,
     limit: int = 20,
 ) -> dict[str, Any]:
-    """Load bounded farm data for the authenticated MIDAS user.
-
-    Keycloak JWT claims are authoritative. Legacy callers may still provide
-    user_type and user_id while the shared-token rollout remains active.
-    """
+    """Load bounded farm data for the authenticated MIDAS user."""
     authenticated_type, authenticated_id = get_authenticated_identity(
         user_type,
         user_id,
@@ -115,15 +107,14 @@ def get_user_farm_data(
 
 @mcp.tool()
 def import_user_resource_records(
+    user_type: UserType,
+    user_id: int,
     request_id: str,
     source_type: str,
     source_name: str,
     records: list[dict[str, Any]],
-    user_type: UserType | None = None,
-    user_id: int | None = None,
 ) -> dict[str, Any]:
     """Import historical records using the authenticated business identity."""
-
     authenticated_type, authenticated_id = get_authenticated_identity(
         user_type,
         user_id,
