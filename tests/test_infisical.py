@@ -24,6 +24,23 @@ class InfisicalTests(unittest.TestCase):
         {
             "INFISICAL_TOKEN": "token",
             "INFISICAL_PROJECT_ID": "project",
+            "INFISICAL_ENV": "staging",
+            "INFISICAL_PATH": "/app",
+        },
+        clear=True,
+    )
+    def test_unknown_environment_fails(self) -> None:
+        with (
+            patch("app.core.infisical.load_dotenv"),
+            self.assertRaisesRegex(RuntimeError, "prod.*dev"),
+        ):
+            load_infisical_secrets()
+
+    @patch.dict(
+        os.environ,
+        {
+            "INFISICAL_TOKEN": "token",
+            "INFISICAL_PROJECT_ID": "project",
             "INFISICAL_ENV": "dev",
             "INFISICAL_PATH": "/app",
         },
