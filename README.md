@@ -20,7 +20,7 @@ O serviço conecta um cliente MCP a duas fontes de informação:
 - Qdrant, para recuperar trechos semanticamente relevantes de documentos;
 - PostgreSQL do MIDAS, para retornar perfil, empresas, farms e dados operacionais associados ao usuário.
 
-O servidor não oferece SQL arbitrário. As consultas PostgreSQL são fixas no código e devem ser executadas com uma credencial de leitura. A autenticação do transporte MCP usa exclusivamente access tokens RS256 do Keycloak. A identidade MIDAS é derivada dos claims assinados `account_type` e `database_id` e nunca é recebida como argumento da tool.
+O servidor não oferece SQL arbitrário. As consultas PostgreSQL são fixas no código e devem ser executadas com uma credencial de leitura. A autenticação do transporte MCP usa exclusivamente access tokens RS256 do Keycloak delegados pelo `ms-ai-server`. Além de issuer/audience/JWKS, o MCP exige `azp=ms-ai-server-mcp-exchange`, impedindo que um token do Android seja usado diretamente no endpoint MCP. A identidade MIDAS é derivada dos claims assinados `account_type` e `database_id` e nunca é recebida como argumento da tool.
 
 Fluxo principal:
 
@@ -84,7 +84,8 @@ Preencha os valores necessários no `.env`:
 | `MIDAS_IMPORT_DATABASE_URL` | vazio | URL exclusiva da role `midas_importer`, com `EXECUTE` apenas na função de importação. |
 | `MIDAS_DB_CONNECT_TIMEOUT` | `10` | Timeout da conexão PostgreSQL, em segundos. |
 | `MCP_JWT_ISSUER` | `https://ouros-keycloak.discloud.app/realms/ouros` | Issuer do realm usado na validação RS256/JWKS. |
-| `MCP_JWT_AUDIENCE` | `ms-mcp-server-ouros-knowledge` | Audience obrigatória no access token. |
+| `MCP_JWT_AUDIENCE` | `ms-mcp-server-ouros-knowledge` | Audience obrigatória no access token delegado. |
+| `MCP_JWT_AUTHORIZED_PARTY` | `ms-ai-server-mcp-exchange` | `azp` obrigatório; bloqueia tokens emitidos diretamente ao mobile/outros clients. |
 | `MCP_JWKS_URL` | derivado do issuer | Endpoint JWKS; pode ser sobrescrito explicitamente. |
 | `MCP_RESOURCE_URL` | `http://localhost:8000/mcp` | URL base do recurso MCP; em produção, use a URL pública. |
 
@@ -108,6 +109,9 @@ MIDAS_IMPORT_DATABASE_URL=postgresql://midas_importer:senha@host/segundo_prod?ss
 MIDAS_DB_CONNECT_TIMEOUT=10
 
 MCP_RESOURCE_URL=http://localhost:8000/mcp
+MCP_JWT_ISSUER=https://ouros-keycloak.discloud.app/realms/ouros
+MCP_JWT_AUDIENCE=ms-mcp-server-ouros-knowledge
+MCP_JWT_AUTHORIZED_PARTY=ms-ai-server-mcp-exchange
 ```
 
 Cuidados importantes:
@@ -154,7 +158,7 @@ O Swagger documenta somente as rotas REST. As tools MCP aparecem no handshake e 
 Todas as chamadas MCP devem enviar:
 
 ```http
-Authorization: Bearer <KEYCLOAK_ACCESS_TOKEN>
+Authorization: Bearer <DELEGATED_KEYCLOAK_ACCESS_TOKEN>
 ```
 
 | Tool | Parâmetros | Comportamento |
@@ -180,7 +184,7 @@ Exemplo de argumentos:
 }
 ```
 
-O `ms-ai-server` encaminha o access token Keycloak já validado do usuário. O MCP valida novamente assinatura, issuer, audience, expiração, role e claims de negócio, e o banco aplica o escopo final de dados.
+O `ms-ai-server` não encaminha o token bruto do Android. Ele autentica o usuário, faz Standard Token Exchange v2 com um client confidencial e envia ao MCP o token resultante. O MCP valida novamente assinatura, issuer, audience, `azp=ms-ai-server-mcp-exchange`, expiração, role e claims de negócio; o banco aplica o escopo final de dados.
 
 ## Ingestão de documentos
 
