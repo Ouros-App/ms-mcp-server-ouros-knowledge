@@ -61,7 +61,11 @@ def _decode_keycloak_token(token: str) -> dict | None:
         )
     except InvalidTokenError:
         return None
-    return claims if isinstance(claims, dict) else None
+    if not isinstance(claims, dict):
+        return None
+    if claims.get("azp") != settings.MCP_JWT_AUTHORIZED_PARTY:
+        return None
+    return claims
 
 
 def _identity_from_claims(claims: dict) -> tuple[str, int] | None:
