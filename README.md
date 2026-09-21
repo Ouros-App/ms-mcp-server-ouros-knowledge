@@ -294,5 +294,5 @@ MIT. Consulte [LICENSE](LICENSE).
 ## Principais contribuidores
 
 <!-- CONTRIBUTORS:START -->
-- [@Nicolas25vlad](https://github.com/Nicolas25vlad) — 4 contribuições
+- [@Nicolas25vlad](https://github.com/Nicolas25vlad) — 8 contribuições
 <!-- CONTRIBUTORS:END -->
