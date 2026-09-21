@@ -31,12 +31,19 @@ class Settings(BaseSettings):
     MCP_RESOURCE_URL: str = "http://localhost:8000/mcp"
     MCP_JWT_ISSUER: str = "https://ouros-keycloak.discloud.app/realms/ouros"
     MCP_JWT_AUDIENCE: str = "ms-mcp-server-ouros-knowledge"
+    MCP_JWT_AUTHORIZED_PARTY: str = "ms-ai-server-mcp-exchange"
     MCP_JWKS_URL: str | None = None
 
     @model_validator(mode="after")
     def validate_keycloak_jwt_config(self) -> "Settings":
-        if not self.MCP_JWT_ISSUER.strip() or not self.MCP_JWT_AUDIENCE.strip():
-            raise ValueError("MCP_JWT_ISSUER e MCP_JWT_AUDIENCE são obrigatórios")
+        if (
+            not self.MCP_JWT_ISSUER.strip()
+            or not self.MCP_JWT_AUDIENCE.strip()
+            or not self.MCP_JWT_AUTHORIZED_PARTY.strip()
+        ):
+            raise ValueError(
+                "MCP_JWT_ISSUER, MCP_JWT_AUDIENCE e MCP_JWT_AUTHORIZED_PARTY são obrigatórios"
+            )
         return self
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
