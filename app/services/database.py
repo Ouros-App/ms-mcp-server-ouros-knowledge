@@ -322,7 +322,7 @@ def get_user_farm_data(
                 cursor.execute(
                     """
                         SELECT id, received_chickens, delivered_chickens,
-                               date_birth, delivery_date, gain, id_enterprise, id_farm
+                               delivery_date, losts, cost, id_enterprise, id_farm
                         FROM midas.lots
                         WHERE id_farm = ANY(%s)
                         ORDER BY id DESC
