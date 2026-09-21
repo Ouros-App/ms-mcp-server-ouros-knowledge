@@ -20,7 +20,7 @@ O serviço conecta um cliente MCP a duas fontes de informação:
 - Qdrant, para recuperar trechos semanticamente relevantes de documentos;
 - PostgreSQL do MIDAS, para retornar perfil, empresas, farms e dados operacionais associados ao usuário.
 
-O servidor não oferece SQL arbitrário. As consultas PostgreSQL são fixas no código e devem ser executadas com uma credencial de leitura. A autenticação do transporte MCP usa um token Bearer configurado no ambiente; a identidade MIDAS é informada em cada chamada das tools de contexto e validada antes da consulta.
+O servidor não oferece SQL arbitrário. As consultas PostgreSQL são fixas no código e devem ser executadas com uma credencial de leitura. A autenticação do transporte MCP usa exclusivamente access tokens RS256 do Keycloak. A identidade MIDAS é derivada dos claims assinados `account_type` e `database_id` e nunca é recebida como argumento da tool.
 
 Fluxo principal:
 
@@ -39,7 +39,7 @@ FastAPI /mcp/
 - Busca semântica com `search_knowledge(query, limit)`.
 - Diagnóstico da coleção Qdrant com `qdrant_status()`.
 - Diagnóstico da conexão PostgreSQL com `postgres_status()`.
-- Contexto personalizado com `get_user_context(...)` e `get_user_farm_data(...)`.
+- Contexto personalizado com `get_user_context()` e `get_user_farm_data(limit)`.
 - CLI para extrair, dividir, embeddar e sincronizar documentos com o Qdrant.
 - Ingestão incremental baseada em SHA-256, modelo, coleção e parâmetros de chunking.
 - Endpoints REST de disponibilidade e saúde.
@@ -83,7 +83,6 @@ Preencha os valores necessários no `.env`:
 | `MIDAS_DATABASE_URL` | vazio | URL de conexão PostgreSQL somente leitura do MIDAS. |
 | `MIDAS_IMPORT_DATABASE_URL` | vazio | URL exclusiva da role `midas_importer`, com `EXECUTE` apenas na função de importação. |
 | `MIDAS_DB_CONNECT_TIMEOUT` | `10` | Timeout da conexão PostgreSQL, em segundos. |
-| `MCP_AUTH_TOKEN` | vazio | Token Bearer legado, mantido apenas como fallback temporário de rollout. |
 | `MCP_JWT_ISSUER` | `https://ouros-keycloak.discloud.app/realms/ouros` | Issuer do realm usado na validação RS256/JWKS. |
 | `MCP_JWT_AUDIENCE` | `ms-mcp-server-ouros-knowledge` | Audience obrigatória no access token. |
 | `MCP_JWKS_URL` | derivado do issuer | Endpoint JWKS; pode ser sobrescrito explicitamente. |
@@ -108,18 +107,16 @@ MIDAS_DATABASE_URL=postgresql://midas_ro:senha@host/segundo_prod?sslmode=require
 MIDAS_IMPORT_DATABASE_URL=postgresql://midas_importer:senha@host/segundo_prod?sslmode=require&channel_binding=require
 MIDAS_DB_CONNECT_TIMEOUT=10
 
-MCP_AUTH_TOKEN=gere-um-token-aleatorio-com-pelo-menos-32-caracteres
 MCP_RESOURCE_URL=http://localhost:8000/mcp
 ```
 
 Cuidados importantes:
 
 - Em deploy, mantenha `INFISICAL_TOKEN` como o único bootstrap secreto externo ao cofre. `INFISICAL_PROJECT_ID`, `INFISICAL_ENV`, `INFISICAL_PATH` e `INFISICAL_HOST` são configuração.
-- Os secrets de aplicação esperados no Infisical incluem `QDRANT_API_KEY`, `NVIDIA_API_KEY`, `MIDAS_DATABASE_URL`, `MIDAS_IMPORT_DATABASE_URL` e `MCP_AUTH_TOKEN`.
+- Os secrets de aplicação esperados no Infisical incluem `QDRANT_API_KEY`, `NVIDIA_API_KEY`, `MIDAS_DATABASE_URL` e `MIDAS_IMPORT_DATABASE_URL`.
 - Quando o Infisical está configurado, os secrets do cofre são carregados antes de `Settings` e prevalecem sobre valores locais com a mesma chave. Sem nenhuma variável de bootstrap, o modo local continua permitido; configuração parcial ou ambiente inválido interrompe o startup.
 - Use o mesmo `NVIDIA_EMBEDDING_MODEL` utilizado para criar os vetores da coleção Qdrant.
 - A coleção Qdrant precisa existir antes da busca ou da ingestão.
-- Gere `MCP_AUTH_TOKEN` aleatoriamente, com pelo menos 32 caracteres.
 - Use `midas_ro` somente para consultas e `midas_importer` somente para executar `midas.import_resource_records`.
 - Nunca versione tokens, senhas ou URLs de conexão reais. O `.env` está ignorado pelo Git.
 - Em um deployment público, configure `MCP_RESOURCE_URL` para a URL pública terminada em `/mcp`, por exemplo `https://ms-midas-mcp.discloud.app/mcp`.
@@ -157,7 +154,7 @@ O Swagger documenta somente as rotas REST. As tools MCP aparecem no handshake e 
 Todas as chamadas MCP devem enviar:
 
 ```http
-Authorization: Bearer <MCP_AUTH_TOKEN>
+Authorization: Bearer <KEYCLOAK_ACCESS_TOKEN>
 ```
 
 | Tool | Parâmetros | Comportamento |
@@ -165,12 +162,12 @@ Authorization: Bearer <MCP_AUTH_TOKEN>
 | `search_knowledge` | `query`, `limit` opcional entre 1 e 20 | Busca trechos similares no Qdrant e retorna conteúdo, metadata e score. |
 | `qdrant_status` | nenhum | Verifica conectividade e existência da coleção sem chamar a NVIDIA. |
 | `postgres_status` | nenhum | Testa a conexão PostgreSQL e informa database e usuário conectados. |
-| `get_user_context` | `user_type`, `user_id` | Retorna perfil e empresas/farms que pertencem ao escopo do usuário. |
-| `get_user_farm_data` | `user_type`, `user_id`, `limit` opcional entre 1 e 100 | Retorna farms, metas, consumos, lotes e dicas limitados ao escopo do usuário. |
-| `prepare_resource_import` | `user_type`, `user_id`, `filename`, `content_type`, `encoded_file` | Disponível apenas para `farm_owner`; converte PDF/XLSX e retorna uma prévia para revisão, sem gravar. |
-| `import_user_resource_records` | `user_type`, `user_id`, `request_id`, `source_type`, `source_name`, `records`, `confirmation` | Disponível apenas para `farm_owner`; exige `request_id` UUID e confirmação explícita antes de gravar os registros. |
+| `get_user_context` | nenhum | Retorna perfil e empresas/farms da identidade assinada no JWT. |
+| `get_user_farm_data` | `limit` opcional entre 1 e 100 | Retorna farms, metas, consumos, lotes e dicas da identidade assinada no JWT. |
+| `prepare_resource_import` | `filename`, `content_type`, `encoded_file` | Disponível apenas para `farm_owner`; converte PDF/XLSX e retorna uma prévia para revisão, sem gravar. |
+| `import_user_resource_records` | `request_id`, `source_type`, `source_name`, `records` | Disponível apenas para `farm_owner`; exige `request_id` UUID e confirmação explícita antes de gravar os registros. |
 
-Os valores aceitos para `user_type` são `farm_owner`, `company_employee` e `admin`. O `user_id` deve ser positivo.
+Os tipos de conta aceitos continuam sendo `farm_owner`, `company_employee` e `admin`, mas são lidos do JWT, não enviados pelo cliente.
 
 Exemplo de argumentos:
 
@@ -178,14 +175,12 @@ Exemplo de argumentos:
 {
   "name": "get_user_farm_data",
   "arguments": {
-    "user_type": "farm_owner",
-    "user_id": 42,
     "limit": 20
   }
 }
 ```
 
-O token MCP é um segredo service-to-service e possui um único consumidor confiável: o `ms-ai-server`. Os frontends não acessam este MCP diretamente. O `ms-ai-server` autentica o usuário, valida que o `user_id` da requisição corresponde ao usuário autenticado e repassa a identidade ao MCP. O MCP valida o token de serviço e o banco deriva a granja permitida e aplica a autorização final.
+O `ms-ai-server` encaminha o access token Keycloak já validado do usuário. O MCP valida novamente assinatura, issuer, audience, expiração, role e claims de negócio, e o banco aplica o escopo final de dados.
 
 ## Ingestão de documentos
 

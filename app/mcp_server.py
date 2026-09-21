@@ -1,11 +1,11 @@
-from typing import Any, Literal
+from typing import Any
 
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.fastmcp import FastMCP
 
 from app.core.config import settings
 from app.services.auth import (
-    KeycloakOrStaticTokenVerifier,
+    KeycloakTokenVerifier,
     get_authenticated_identity,
 )
 from app.services.database import (
@@ -24,8 +24,6 @@ from app.services.imports import extract_resource_records, file_to_markdown
 from app.services.knowledge import qdrant_status as get_qdrant_status
 from app.services.knowledge import search_knowledge as search_qdrant
 
-UserType = Literal["farm_owner", "company_employee", "admin"]
-
 mcp = FastMCP(
     name=settings.PROJECT_NAME,
     host="0.0.0.0",
@@ -33,10 +31,10 @@ mcp = FastMCP(
     json_response=True,
     streamable_http_path="/",
     auth=AuthSettings(
-        issuer_url=settings.MCP_JWT_ISSUER or settings.MCP_RESOURCE_URL,
+        issuer_url=settings.MCP_JWT_ISSUER,
         resource_server_url=settings.MCP_RESOURCE_URL,
     ),
-    token_verifier=KeycloakOrStaticTokenVerifier(),
+    token_verifier=KeycloakTokenVerifier(),
 )
 
 
@@ -71,59 +69,33 @@ def postgres_status() -> dict[str, Any]:
 
 
 @mcp.tool()
-def get_user_context(
-    user_type: UserType,
-    user_id: int,
-) -> dict[str, Any]:
-    """Load profile and linked farms for the authenticated MIDAS user.
-
-    Keycloak claims are authoritative and must match these compatibility
-    arguments while the legacy client contract remains in place.
-    """
-    authenticated_type, authenticated_id = get_authenticated_identity(
-        user_type,
-        user_id,
-    )
-    return get_database_user_context(authenticated_type, authenticated_id)
+def get_user_context() -> dict[str, Any]:
+    """Load profile and linked farms for the authenticated Keycloak identity."""
+    user_type, user_id = get_authenticated_identity()
+    return get_database_user_context(user_type, user_id)
 
 
 @mcp.tool()
-def get_user_farm_data(
-    user_type: UserType,
-    user_id: int,
-    limit: int = 20,
-) -> dict[str, Any]:
-    """Load bounded farm data for the authenticated MIDAS user."""
-    authenticated_type, authenticated_id = get_authenticated_identity(
-        user_type,
-        user_id,
-    )
-    return get_database_user_farm_data(
-        authenticated_type,
-        authenticated_id,
-        limit,
-    )
+def get_user_farm_data(limit: int = 20) -> dict[str, Any]:
+    """Load bounded farm data for the authenticated Keycloak identity."""
+    user_type, user_id = get_authenticated_identity()
+    return get_database_user_farm_data(user_type, user_id, limit)
 
 
 @mcp.tool()
 def import_user_resource_records(
-    user_type: UserType,
-    user_id: int,
     request_id: str,
     source_type: str,
     source_name: str,
     records: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    """Import historical records using the authenticated business identity."""
-    authenticated_type, authenticated_id = get_authenticated_identity(
-        user_type,
-        user_id,
-    )
-    if authenticated_type != "farm_owner":
+    """Import historical records for the authenticated farm owner."""
+    user_type, user_id = get_authenticated_identity()
+    if user_type != "farm_owner":
         raise PermissionError("somente farm_owner pode importar registros")
     return get_database_import_resource_records(
-        authenticated_type,
-        authenticated_id,
+        user_type,
+        user_id,
         request_id,
         source_type,
         source_name,
