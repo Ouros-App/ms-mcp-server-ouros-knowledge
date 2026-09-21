@@ -36,10 +36,14 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_keycloak_jwt_config(self) -> "Settings":
+        self.MCP_JWT_ISSUER = self.MCP_JWT_ISSUER.strip()
+        self.MCP_JWT_AUDIENCE = self.MCP_JWT_AUDIENCE.strip()
+        self.MCP_JWT_AUTHORIZED_PARTY = self.MCP_JWT_AUTHORIZED_PARTY.strip()
+
         if (
-            not self.MCP_JWT_ISSUER.strip()
-            or not self.MCP_JWT_AUDIENCE.strip()
-            or not self.MCP_JWT_AUTHORIZED_PARTY.strip()
+            not self.MCP_JWT_ISSUER
+            or not self.MCP_JWT_AUDIENCE
+            or not self.MCP_JWT_AUTHORIZED_PARTY
         ):
             raise ValueError(
                 "MCP_JWT_ISSUER, MCP_JWT_AUDIENCE e MCP_JWT_AUTHORIZED_PARTY são obrigatórios"
