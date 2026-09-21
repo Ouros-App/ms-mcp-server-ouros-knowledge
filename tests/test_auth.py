@@ -34,12 +34,20 @@ class AuthTests(unittest.IsolatedAsyncioTestCase):
         jwks_client = Mock()
         jwks_client.get_jwk_set.return_value = object()
         jwks_client.get_signing_key_from_jwt.return_value = signing_key
-        expected_claims = {"sub": "subject"}
+        expected_claims = {
+            "sub": "subject",
+            "azp": "ms-ai-server-mcp-exchange",
+        }
 
         with (
             patch.object(settings, "MCP_JWKS_URL", "https://keys.example/jwks"),
             patch.object(settings, "MCP_JWT_ISSUER", "https://issuer.example"),
             patch.object(settings, "MCP_JWT_AUDIENCE", "mcp-audience"),
+            patch.object(
+                settings,
+                "MCP_JWT_AUTHORIZED_PARTY",
+                "ms-ai-server-mcp-exchange",
+            ),
             patch("app.services.auth._get_jwks_client", return_value=jwks_client),
             patch("app.services.auth.decode", return_value=expected_claims) as decoder,
         ):
@@ -51,6 +59,33 @@ class AuthTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(decoder.call_args.kwargs["algorithms"], ["RS256"])
         self.assertEqual(decoder.call_args.kwargs["issuer"], "https://issuer.example")
         self.assertEqual(decoder.call_args.kwargs["audience"], "mcp-audience")
+
+    def test_direct_mobile_authorized_party_is_rejected(self) -> None:
+        signing_key = SimpleNamespace(key="public-key")
+        jwks_client = Mock()
+        jwks_client.get_jwk_set.return_value = object()
+        jwks_client.get_signing_key_from_jwt.return_value = signing_key
+
+        with (
+            patch.object(settings, "MCP_JWKS_URL", "https://keys.example/jwks"),
+            patch.object(settings, "MCP_JWT_ISSUER", "https://issuer.example"),
+            patch.object(settings, "MCP_JWT_AUDIENCE", "mcp-audience"),
+            patch.object(
+                settings,
+                "MCP_JWT_AUTHORIZED_PARTY",
+                "ms-ai-server-mcp-exchange",
+            ),
+            patch("app.services.auth._get_jwks_client", return_value=jwks_client),
+            patch(
+                "app.services.auth.decode",
+                return_value={
+                    "sub": "subject",
+                    "azp": "ouros-mobile",
+                    "aud": ["mcp-audience"],
+                },
+            ),
+        ):
+            self.assertIsNone(_decode_keycloak_token("direct-mobile-token"))
 
     def test_identity_claim_validation(self) -> None:
         self.assertEqual(
