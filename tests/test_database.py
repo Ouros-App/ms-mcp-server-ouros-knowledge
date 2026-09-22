@@ -19,6 +19,7 @@ class FakeCursor:
     def __init__(self, responses: list[object]) -> None:
         self.responses = iter(responses)
         self.current: object = None
+        self.queries: list[str] = []
 
     def __enter__(self) -> Self:
         return self
@@ -26,7 +27,9 @@ class FakeCursor:
     def __exit__(self, *_args: object) -> None:
         return None
 
-    def execute(self, *_args: object) -> "FakeCursor":
+    def execute(self, *args: object) -> "FakeCursor":
+        if args and isinstance(args[0], str):
+            self.queries.append(args[0])
         self.current = next(self.responses)
         return self
 
@@ -198,6 +201,15 @@ class DatabaseGuardTests(unittest.TestCase):
 
         self.assertEqual(result["farm_ids"], [8])
         self.assertEqual(result["data"]["individual_goals"][0]["target_value"], 4.5)
+
+        lots_query = next(
+            query for query in cursor.queries if "FROM midas.lots" in query
+        )
+        self.assertIn("delivery_date", lots_query)
+        self.assertIn("losts", lots_query)
+        self.assertIn("cost", lots_query)
+        self.assertNotIn("date_birth", lots_query)
+        self.assertNotIn("gain", lots_query)
 
     @patch("app.services.database._connect")
     def test_farm_data_for_admin_has_no_farms(self, connect) -> None:
