@@ -169,7 +169,7 @@ Authorization: Bearer <DELEGATED_KEYCLOAK_ACCESS_TOKEN>
 | `postgres_status` | nenhum | Testa a conexão PostgreSQL e informa database e usuário conectados. |
 | `get_user_context` | nenhum | Retorna somente contexto operacional necessário da identidade assinada no JWT. E-mail, documento, telefone e IDs de escopo não são expostos ao modelo. |
 | `get_user_farm_data` | `limit` opcional entre 1 e 100 | Retorna farms, metas, consumos, lotes e dicas da identidade assinada no JWT. |
-| `get_consumption_summary` | `period_days` opcional entre 1 e 366 | Agrega água e energia somente nas farms autorizadas pelo JWT. Água é retornada como diferença de leitura do hidrômetro, sem conversão de unidade não definida; energia usa kWh. |
+| `get_consumption_summary` | `period_days` opcional entre 1 e 366 | Agrega água e energia somente nas farms autorizadas pelo JWT. Água é retornada como diferença de leitura do hidrômetro, sem conversão de unidade não definida; energia usa kWh. O resumo não calcula CAA/CEA nem usa `chickens_now` como denominador, pois as métricas oficiais dependem das aves entregues do lote correspondente. |
 | `prepare_resource_import` | `filename`, `content_type`, `encoded_file` | Disponível apenas para `farm_owner`; converte PDF/XLSX e retorna uma prévia para revisão, sem gravar. |
 | `import_user_resource_records` | `request_id`, `source_type`, `source_name`, `records` | Disponível apenas para `farm_owner`; exige `request_id` UUID e confirmação explícita antes de gravar os registros. |
 
