@@ -8,6 +8,7 @@ from starlette.routing import Mount
 from app.api.routes import health_check, read_root
 from app.main import app
 from app.mcp_server import (
+    get_consumption_summary,
     get_user_context,
     get_user_farm_data,
     import_user_resource_records,
@@ -115,6 +116,24 @@ class McpTests(unittest.TestCase):
         self.assertEqual(get_user_farm_data(5), {"data": {}})
         identity.assert_called_once_with()
         farm_data.assert_called_once_with("farm_owner", 42, 5)
+
+
+    @patch(
+        "app.mcp_server.get_database_consumption_summary",
+        return_value={"period_days": 30, "summaries": []},
+    )
+    @patch("app.mcp_server.get_authenticated_identity", return_value=("farm_owner", 42))
+    def test_consumption_summary_uses_only_token_identity(
+        self,
+        identity,
+        summary,
+    ) -> None:
+        self.assertEqual(
+            get_consumption_summary(30),
+            {"period_days": 30, "summaries": []},
+        )
+        identity.assert_called_once_with()
+        summary.assert_called_once_with("farm_owner", 42, 30)
 
     @patch(
         "app.mcp_server.get_database_import_resource_records",
