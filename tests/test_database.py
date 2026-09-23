@@ -275,6 +275,7 @@ class DatabaseGuardTests(unittest.TestCase):
         self.assertIn("id_farm = ANY(%s)", query)
         self.assertIn("LEFT JOIN water AS w", query)
         self.assertIn("LEFT JOIN energy AS e", query)
+        self.assertNotIn("chickens_now", query)
 
     @patch("app.services.database._connect")
     def test_consumption_summary_for_admin_has_no_implicit_global_scope(self, connect) -> None:
