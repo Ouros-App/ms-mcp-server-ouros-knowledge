@@ -123,6 +123,10 @@ class DatabaseGuardTests(unittest.TestCase):
             get_consumption_summary("farm_owner", 1, 0)
         with self.assertRaises(ValueError):
             get_consumption_summary("farm_owner", 1, 367)
+        with self.assertRaises(ValueError):
+            get_consumption_summary("farm_owner", 1, 1.5)  # type: ignore[arg-type]
+        with self.assertRaises(ValueError):
+            get_consumption_summary("farm_owner", 1, True)  # type: ignore[arg-type]
 
         connect.assert_not_called()
 
@@ -278,6 +282,8 @@ class DatabaseGuardTests(unittest.TestCase):
                 "user_id": 1,
                 "farm_ids": [],
                 "period_days": 30,
+                "water_unit": "hydrometer_reading_delta",
+                "energy_unit": "kWh",
                 "summaries": [],
             },
         )
