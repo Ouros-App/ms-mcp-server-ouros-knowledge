@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     VERSION: str = "0.1.0"
     APP_PORT: int = 8000
     APP_NAME: str = "ouros_knowledge_mcp"
+    METRICS_TOKEN: str | None = None
     QDRANT_URL: str = "http://localhost:6333"
     QDRANT_API_KEY: str | None = None
     QDRANT_COLLECTION_NAME: str = "ouros_knowledge"
