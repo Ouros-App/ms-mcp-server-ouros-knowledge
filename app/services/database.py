@@ -70,9 +70,13 @@ def _validate_limit(limit: int) -> None:
 
 
 def _validate_period_days(period_days: int) -> None:
-    """Bound aggregate queries to a reasonable read-only time window."""
-    if isinstance(period_days, bool) or not 1 <= period_days <= 366:
-        raise ValueError("period_days deve estar entre 1 e 366")
+    """Bound aggregate queries to an integer read-only time window."""
+    if (
+        isinstance(period_days, bool)
+        or not isinstance(period_days, int)
+        or not 1 <= period_days <= 366
+    ):
+        raise ValueError("period_days deve ser um inteiro entre 1 e 366")
 
 
 def import_resource_records(
@@ -381,6 +385,8 @@ def get_consumption_summary(
                 "user_id": user_id,
                 "farm_ids": [],
                 "period_days": period_days,
+                "water_unit": "hydrometer_reading_delta",
+                "energy_unit": "kWh",
                 "summaries": [],
             }
 
