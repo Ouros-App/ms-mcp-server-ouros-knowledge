@@ -88,17 +88,19 @@ class McpTests(unittest.TestCase):
 
 
     def test_metrics_require_dedicated_scrape_token(self) -> None:
-        with patch.object(settings, "METRICS_TOKEN", "scrape-token"):
-            with TestClient(app) as client:
-                missing = client.get("/metrics")
-                wrong = client.get(
-                    "/metrics",
-                    headers={"Authorization": "Bearer wrong"},
-                )
-                allowed = client.get(
-                    "/metrics",
-                    headers={"Authorization": "Bearer scrape-token"},
-                )
+        with (
+            patch.object(settings, "METRICS_TOKEN", "scrape-token"),
+            TestClient(app) as client,
+        ):
+            missing = client.get("/metrics")
+            wrong = client.get(
+                "/metrics",
+                headers={"Authorization": "Bearer wrong"},
+            )
+            allowed = client.get(
+                "/metrics",
+                headers={"Authorization": "Bearer scrape-token"},
+            )
 
         self.assertEqual(missing.status_code, 401)
         self.assertEqual(wrong.status_code, 401)
@@ -107,9 +109,11 @@ class McpTests(unittest.TestCase):
         self.assertIn("ouros_mcp_tool_calls_total", allowed.text)
 
     def test_metrics_fail_closed_without_scrape_token(self) -> None:
-        with patch.object(settings, "METRICS_TOKEN", None):
-            with TestClient(app) as client:
-                response = client.get("/metrics")
+        with (
+            patch.object(settings, "METRICS_TOKEN", None),
+            TestClient(app) as client,
+        ):
+            response = client.get("/metrics")
 
         self.assertEqual(response.status_code, 503)
 
