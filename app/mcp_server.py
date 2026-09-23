@@ -9,6 +9,9 @@ from app.services.auth import (
     get_authenticated_identity,
 )
 from app.services.database import (
+    get_consumption_summary as get_database_consumption_summary,
+)
+from app.services.database import (
     get_user_context as get_database_user_context,
 )
 from app.services.database import (
@@ -80,6 +83,17 @@ def get_user_farm_data(limit: int = 20) -> dict[str, Any]:
     """Load bounded farm data for the authenticated Keycloak identity."""
     user_type, user_id = get_authenticated_identity()
     return get_database_user_farm_data(user_type, user_id, limit)
+
+
+@mcp.tool()
+def get_consumption_summary(period_days: int = 30) -> dict[str, Any]:
+    """Aggregate scoped water and energy records for the authenticated identity.
+
+    The tool never accepts user_id or farm_id. Scope is derived exclusively from
+    the delegated Keycloak token and the PostgreSQL relationship model.
+    """
+    user_type, user_id = get_authenticated_identity()
+    return get_database_consumption_summary(user_type, user_id, period_days)
 
 
 @mcp.tool()
