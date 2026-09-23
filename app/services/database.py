@@ -387,6 +387,32 @@ def get_consumption_summary(
         summaries = _rows(
             cursor.execute(
                 """
+                WITH water AS (
+                    SELECT
+                        id_farm,
+                        COUNT(*) AS water_records,
+                        MIN(registration_date) AS first_water_record,
+                        MAX(registration_date) AS last_water_record,
+                        SUM(end_hydrometer - start_hydrometer) AS water_meter_delta
+                    FROM midas.water_registries
+                    WHERE registration_date >= CURRENT_DATE - (%s - 1)
+                      AND registration_date <= CURRENT_DATE
+                      AND id_farm = ANY(%s)
+                    GROUP BY id_farm
+                ),
+                energy AS (
+                    SELECT
+                        id_farm,
+                        COUNT(*) AS energy_records,
+                        MIN(registration_date) AS first_energy_record,
+                        MAX(registration_date) AS last_energy_record,
+                        SUM(energy_consumption) AS energy_consumption_kwh
+                    FROM midas.energy_registries
+                    WHERE registration_date >= CURRENT_DATE - (%s - 1)
+                      AND registration_date <= CURRENT_DATE
+                      AND id_farm = ANY(%s)
+                    GROUP BY id_farm
+                )
                 SELECT
                     f.id AS id_farm,
                     f.name AS farm_name,
@@ -395,34 +421,22 @@ def get_consumption_summary(
                     a.state,
                     a.city,
                     f.chickens_now,
-                    COUNT(DISTINCT w.id) AS water_records,
-                    MIN(w.registration_date) AS first_water_record,
-                    MAX(w.registration_date) AS last_water_record,
-                    COALESCE(
-                        SUM(w.end_hydrometer - w.start_hydrometer),
-                        0
-                    ) AS water_meter_delta,
-                    COUNT(DISTINCT e.id) AS energy_records,
-                    MIN(e.registration_date) AS first_energy_record,
-                    MAX(e.registration_date) AS last_energy_record,
-                    COALESCE(SUM(e.energy_consumption), 0) AS energy_consumption_kwh
+                    COALESCE(w.water_records, 0) AS water_records,
+                    w.first_water_record,
+                    w.last_water_record,
+                    COALESCE(w.water_meter_delta, 0) AS water_meter_delta,
+                    COALESCE(e.energy_records, 0) AS energy_records,
+                    e.first_energy_record,
+                    e.last_energy_record,
+                    COALESCE(e.energy_consumption_kwh, 0) AS energy_consumption_kwh
                 FROM midas.farms AS f
                 LEFT JOIN midas.addresses AS a ON a.id = f.id_address
-                LEFT JOIN midas.water_registries AS w
-                    ON w.id_farm = f.id
-                   AND w.registration_date >= CURRENT_DATE - (%s - 1)
-                   AND w.registration_date <= CURRENT_DATE
-                LEFT JOIN midas.energy_registries AS e
-                    ON e.id_farm = f.id
-                   AND e.registration_date >= CURRENT_DATE - (%s - 1)
-                   AND e.registration_date <= CURRENT_DATE
+                LEFT JOIN water AS w ON w.id_farm = f.id
+                LEFT JOIN energy AS e ON e.id_farm = f.id
                 WHERE f.id = ANY(%s)
-                GROUP BY
-                    f.id, f.name, f.region, f.place, a.state, a.city,
-                    f.chickens_now
                 ORDER BY f.id
                 """,
-                (period_days, period_days, farm_ids),
+                (period_days, farm_ids, period_days, farm_ids, farm_ids),
             )
         )
 
