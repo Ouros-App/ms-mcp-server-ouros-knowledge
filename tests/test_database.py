@@ -158,16 +158,22 @@ class DatabaseGuardTests(unittest.TestCase):
                     "farm_id": 8,
                     "enterprise_id": 3,
                 },
-                [{"id": 3, "name": "Enterprise"}],
-                [{"id": 8, "name": "Farm"}],
+                [{"name": "Enterprise"}],
+                [{"name": "Farm", "state": "SP", "city": "Campinas"}],
             ]
         )
         connect.return_value = FakeConnection(cursor)
 
         result = get_user_context("farm_owner", 42)
 
-        self.assertEqual(result["enterprises"], [{"id": 3, "name": "Enterprise"}])
-        self.assertEqual(result["farms"], [{"id": 8, "name": "Farm"}])
+        self.assertEqual(result["enterprises"], [{"name": "Enterprise"}])
+        self.assertEqual(
+            result["farms"],
+            [{"name": "Farm", "state": "SP", "city": "Campinas"}],
+        )
+        self.assertNotIn("email", result["profile"])
+        self.assertNotIn("document_number", result["profile"])
+        self.assertNotIn("telephone", result["profile"])
 
     @patch("app.services.database._connect")
     def test_user_context_scopes_employee_and_admin(self, connect) -> None:
@@ -175,13 +181,13 @@ class DatabaseGuardTests(unittest.TestCase):
             [
                 {"user_id": 5, "enterprise_id": 3},
                 [{"id": 8}],
-                [{"id": 3, "name": "Enterprise"}],
-                [{"id": 8, "name": "Farm"}],
+                [{"name": "Enterprise"}],
+                [{"name": "Farm"}],
             ]
         )
         connect.return_value = FakeConnection(employee_cursor)
         employee = get_user_context("company_employee", 5)
-        self.assertEqual(employee["farms"], [{"id": 8, "name": "Farm"}])
+        self.assertEqual(employee["farms"], [{"name": "Farm"}])
 
         admin_cursor = FakeCursor([{"user_id": 1, "email": "admin@test"}])
         connect.return_value = FakeConnection(admin_cursor)
