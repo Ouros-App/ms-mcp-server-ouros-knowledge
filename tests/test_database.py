@@ -166,14 +166,15 @@ class DatabaseGuardTests(unittest.TestCase):
 
         result = get_user_context("farm_owner", 42)
 
+        self.assertEqual(result["profile"], {"name": "Owner"})
         self.assertEqual(result["enterprises"], [{"name": "Enterprise"}])
         self.assertEqual(
             result["farms"],
             [{"name": "Farm", "state": "SP", "city": "Campinas"}],
         )
-        self.assertNotIn("email", result["profile"])
-        self.assertNotIn("document_number", result["profile"])
-        self.assertNotIn("telephone", result["profile"])
+        self.assertNotIn("user_id", result["profile"])
+        self.assertNotIn("farm_id", result["profile"])
+        self.assertNotIn("enterprise_id", result["profile"])
 
     @patch("app.services.database._connect")
     def test_user_context_scopes_employee_and_admin(self, connect) -> None:
