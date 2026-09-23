@@ -1,11 +1,13 @@
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from mcp.server.auth.provider import AccessToken
 from starlette.routing import Mount
 
-from app.api.routes import health_check, read_root
+from app.api.routes import health_check, metrics, read_root
 from app.core.config import settings
 from app.main import app
 from app.mcp_server import (
@@ -86,36 +88,36 @@ class McpTests(unittest.TestCase):
         self.assertEqual(health_check().status, "ok")
         self.assertIsNotNone(app)
 
-
     def test_metrics_require_dedicated_scrape_token(self) -> None:
-        with (
-            patch.object(settings, "METRICS_TOKEN", "scrape-token"),
-            TestClient(app) as client,
-        ):
-            missing = client.get("/metrics")
-            wrong = client.get(
-                "/metrics",
-                headers={"Authorization": "Bearer wrong"},
-            )
-            allowed = client.get(
-                "/metrics",
-                headers={"Authorization": "Bearer scrape-token"},
+        with patch.object(settings, "METRICS_TOKEN", "scrape-token"):
+            with self.assertRaises(HTTPException) as missing:
+                metrics(SimpleNamespace(headers={}))
+            with self.assertRaises(HTTPException) as wrong:
+                metrics(
+                    SimpleNamespace(
+                        headers={"Authorization": "Bearer wrong"}
+                    )
+                )
+            allowed = metrics(
+                SimpleNamespace(
+                    headers={"Authorization": "Bearer scrape-token"}
+                )
             )
 
-        self.assertEqual(missing.status_code, 401)
-        self.assertEqual(wrong.status_code, 401)
+        self.assertEqual(missing.exception.status_code, 401)
+        self.assertEqual(wrong.exception.status_code, 401)
         self.assertEqual(allowed.status_code, 200)
-        self.assertIn("ouros_mcp_http_requests_total", allowed.text)
-        self.assertIn("ouros_mcp_tool_calls_total", allowed.text)
+        self.assertIn(b"ouros_mcp_http_requests_total", allowed.body)
+        self.assertIn(b"ouros_mcp_tool_calls_total", allowed.body)
 
     def test_metrics_fail_closed_without_scrape_token(self) -> None:
         with (
             patch.object(settings, "METRICS_TOKEN", None),
-            TestClient(app) as client,
+            self.assertRaises(HTTPException) as error,
         ):
-            response = client.get("/metrics")
+            metrics(SimpleNamespace(headers={}))
 
-        self.assertEqual(response.status_code, 503)
+        self.assertEqual(error.exception.status_code, 503)
 
     def test_search_validates_query_and_limit(self) -> None:
         with self.assertRaises(ValueError):
