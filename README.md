@@ -69,6 +69,7 @@ Preencha os valores necessários no `.env`:
 | --- | --- | --- |
 | `APP_PORT` | `8000` | Porta em que o Uvicorn escuta. |
 | `APP_NAME` | `ouros_knowledge_mcp` | Nome usado pelos scripts Docker. |
+| `METRICS_TOKEN` | vazio | Bearer dedicado ao scrape de `/metrics`; não reutilize JWT de usuário. |
 | `INFISICAL_TOKEN` / `INFISICAL_PROJECT_ID` / `INFISICAL_ENV` / `INFISICAL_PATH` | vazio | Bootstrap opcional do Infisical. Configure as quatro juntas; `INFISICAL_ENV` aceita `prod` ou `dev`. |
 | `INFISICAL_HOST` | `https://app.infisical.com` | Host do Infisical. |
 | `PROJECT_NAME` | `Ouros Knowledge MCP` | Nome exibido pela API e pelo servidor MCP. |
@@ -96,6 +97,7 @@ Exemplo mínimo:
 APP_PORT=8000
 APP_NAME=ouros_knowledge_mcp
 PROJECT_NAME=Ouros Knowledge MCP
+METRICS_TOKEN=<metrics-scrape-token>
 
 QDRANT_URL=http://localhost:6333
 QDRANT_API_KEY=
@@ -141,6 +143,7 @@ URLs locais:
 | --- | --- |
 | `http://localhost:8000/` | Verificação básica de disponibilidade. |
 | `http://localhost:8000/health` | Health check. |
+| `http://localhost:8000/metrics` | Métricas Prometheus, protegidas por `METRICS_TOKEN`. |
 | `http://localhost:8000/docs` | Swagger UI. |
 | `http://localhost:8000/redoc` | ReDoc. |
 | `http://localhost:8000/mcp/` | Transporte MCP via Streamable HTTP. |
@@ -153,6 +156,26 @@ curl http://localhost:8000/health
 ```
 
 O Swagger documenta somente as rotas REST. As tools MCP aparecem no handshake e na listagem de tools do cliente MCP, não como operações REST no OpenAPI.
+
+## Observabilidade
+
+O Knowledge MCP expõe `GET /metrics` com um Bearer dedicado de coleta. As métricas
+não carregam usuário, fazenda, thread, argumentos ou conteúdo retornado pelas tools.
+
+São medidos:
+
+- quantidade, status e duração HTTP, com a rota `/mcp` normalizada;
+- chamadas, falhas, duração e concorrência por nome de tool;
+- métricas padrão do processo Python, usadas para derivar uptime.
+
+Os nomes de tool são limitados por allowlist para evitar cardinalidade dinâmica. O
+AI Server também mede o tempo de ida e volta ao MCP; assim o Telemetry consegue
+separar latência de rede/orquestração da execução interna da tool.
+
+```bash
+curl http://localhost:8000/metrics \
+  -H 'Authorization: Bearer <metrics-scrape-token>'
+```
 
 ## Tools MCP
 
