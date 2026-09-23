@@ -40,6 +40,7 @@ FastAPI /mcp/
 - Diagnóstico da coleção Qdrant com `qdrant_status()`.
 - Diagnóstico da conexão PostgreSQL com `postgres_status()`.
 - Contexto personalizado com `get_user_context()` e `get_user_farm_data(limit)`.
+- Resumo agregado e autenticado de consumo com `get_consumption_summary(period_days)`, sem aceitar IDs de usuário ou fazenda.
 - CLI para extrair, dividir, embeddar e sincronizar documentos com o Qdrant.
 - Ingestão incremental baseada em SHA-256, modelo, coleção e parâmetros de chunking.
 - Endpoints REST de disponibilidade e saúde.
@@ -168,6 +169,7 @@ Authorization: Bearer <DELEGATED_KEYCLOAK_ACCESS_TOKEN>
 | `postgres_status` | nenhum | Testa a conexão PostgreSQL e informa database e usuário conectados. |
 | `get_user_context` | nenhum | Retorna perfil e empresas/farms da identidade assinada no JWT. |
 | `get_user_farm_data` | `limit` opcional entre 1 e 100 | Retorna farms, metas, consumos, lotes e dicas da identidade assinada no JWT. |
+| `get_consumption_summary` | `period_days` opcional entre 1 e 366 | Agrega água e energia somente nas farms autorizadas pelo JWT. Água é retornada como diferença de leitura do hidrômetro, sem conversão de unidade não definida; energia usa kWh. |
 | `prepare_resource_import` | `filename`, `content_type`, `encoded_file` | Disponível apenas para `farm_owner`; converte PDF/XLSX e retorna uma prévia para revisão, sem gravar. |
 | `import_user_resource_records` | `request_id`, `source_type`, `source_name`, `records` | Disponível apenas para `farm_owner`; exige `request_id` UUID e confirmação explícita antes de gravar os registros. |
 
@@ -184,7 +186,7 @@ Exemplo de argumentos:
 }
 ```
 
-O `ms-ai-server` não encaminha o token bruto do Android. Ele autentica o usuário, faz Standard Token Exchange v2 com um client confidencial e envia ao MCP o token resultante. O MCP valida novamente assinatura, issuer, audience, `azp=ms-ai-server-mcp-exchange`, expiração, role e claims de negócio; o banco aplica o escopo final de dados.
+O `ms-ai-server` não encaminha o token bruto do Android. Ele autentica o usuário, faz Standard Token Exchange v2 com um client confidencial e envia ao MCP o token resultante. O MCP valida novamente assinatura, issuer, audience, `azp=ms-ai-server-mcp-exchange`, expiração, role e claims de negócio; o banco aplica o escopo final de dados. As tools agregadas seguem o mesmo modelo de autorização e não expõem SQL arbitrário nem aceitam `farm_id`/ `user_id` vindos do modelo.
 
 ## Ingestão de documentos
 
