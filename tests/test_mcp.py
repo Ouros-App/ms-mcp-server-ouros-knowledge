@@ -5,6 +5,7 @@ from unittest.mock import patch
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from mcp.server.auth.provider import AccessToken
+from pydantic import SecretStr
 from starlette.routing import Mount
 
 from app.api.routes import health_check, metrics, read_root
@@ -89,7 +90,7 @@ class McpTests(unittest.TestCase):
         self.assertIsNotNone(app)
 
     def test_metrics_require_dedicated_scrape_token(self) -> None:
-        with patch.object(settings, "METRICS_TOKEN", "scrape-token"):
+        with patch.object(settings, "METRICS_TOKEN", SecretStr("scrape-token")):
             with self.assertRaises(HTTPException) as missing:
                 metrics(SimpleNamespace(headers={}))
             with self.assertRaises(HTTPException) as wrong:
