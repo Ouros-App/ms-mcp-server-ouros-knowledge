@@ -238,7 +238,6 @@ def get_user_context(user_type: UserType, user_id: int) -> dict[str, Any]:
     }
     return {
         "user_type": user_type,
-        "user_id": user_id,
         "profile": public_profile,
         "enterprises": enterprises,
         "farms": farms,
