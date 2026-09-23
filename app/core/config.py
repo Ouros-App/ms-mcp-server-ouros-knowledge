@@ -1,4 +1,4 @@
-from pydantic import model_validator
+from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.core.infisical import load_infisical_secrets
@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     VERSION: str = "0.1.0"
     APP_PORT: int = 8000
     APP_NAME: str = "ouros_knowledge_mcp"
-    METRICS_TOKEN: str | None = None
+    METRICS_TOKEN: SecretStr | None = None
     QDRANT_URL: str = "http://localhost:6333"
     QDRANT_API_KEY: str | None = None
     QDRANT_COLLECTION_NAME: str = "ouros_knowledge"
@@ -34,6 +34,15 @@ class Settings(BaseSettings):
     MCP_JWT_AUDIENCE: str = "ms-mcp-server-ouros-knowledge"
     MCP_JWT_AUTHORIZED_PARTY: str = "ms-ai-server-mcp-exchange"
     MCP_JWKS_URL: str | None = None
+
+    @field_validator("METRICS_TOKEN", mode="before")
+    @classmethod
+    def empty_metrics_token_to_none(cls, value):
+        if isinstance(value, SecretStr):
+            return value if value.get_secret_value().strip() else None
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
     @model_validator(mode="after")
     def validate_keycloak_jwt_config(self) -> "Settings":
