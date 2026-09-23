@@ -1,6 +1,7 @@
-from typing import Any
+from typing import Annotated, Any
 
 from mcp.server.auth.settings import AuthSettings
+from pydantic import Field
 from mcp.server.fastmcp import FastMCP
 
 from app.core.config import settings
@@ -44,7 +45,10 @@ mcp = FastMCP(
 @mcp.tool()
 def search_knowledge(
     query: str,
-    limit: int = settings.SEARCH_TOP_K,
+    limit: Annotated[
+        int,
+        Field(ge=1, le=20, description="Quantidade maxima de trechos retornados."),
+    ] = settings.SEARCH_TOP_K,
 ) -> list[dict[str, Any]]:
     """Search Qdrant using NVIDIA embeddings.
 
@@ -79,14 +83,24 @@ def get_user_context() -> dict[str, Any]:
 
 
 @mcp.tool()
-def get_user_farm_data(limit: int = 20) -> dict[str, Any]:
+def get_user_farm_data(
+    limit: Annotated[
+        int,
+        Field(ge=1, le=100, description="Quantidade maxima por conjunto de dados."),
+    ] = 20,
+) -> dict[str, Any]:
     """Load bounded farm data for the authenticated Keycloak identity."""
     user_type, user_id = get_authenticated_identity()
     return get_database_user_farm_data(user_type, user_id, limit)
 
 
 @mcp.tool()
-def get_consumption_summary(period_days: int = 30) -> dict[str, Any]:
+def get_consumption_summary(
+    period_days: Annotated[
+        int,
+        Field(ge=1, le=366, description="Janela de consumo em dias."),
+    ] = 30,
+) -> dict[str, Any]:
     """Aggregate scoped water and energy records for the authenticated identity.
 
     The tool never accepts user_id or farm_id. Scope is derived exclusively from
