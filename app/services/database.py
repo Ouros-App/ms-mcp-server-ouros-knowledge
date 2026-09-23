@@ -131,9 +131,6 @@ def _resolve_user_scope(
             SELECT
                 fo.id AS user_id,
                 fo.name,
-                fo.email,
-                fo.document_number,
-                fo.telephone,
                 fo.id_farm AS farm_id,
                 f.id_enterprise AS enterprise_id
             FROM midas.farm_owners AS fo
@@ -152,9 +149,6 @@ def _resolve_user_scope(
             SELECT
                 ce.id AS user_id,
                 ce.name,
-                ce.document_number,
-                ce.email,
-                ce.telephone,
                 ce.id_enterprise AS enterprise_id
             FROM midas.company_employees AS ce
             WHERE ce.id = %s
@@ -170,7 +164,7 @@ def _resolve_user_scope(
         return dict(row), [farm["id"] for farm in farms], [row["enterprise_id"]]
 
     row = cursor.execute(
-        "SELECT id AS user_id, email FROM midas.adms WHERE id = %s",
+        "SELECT id AS user_id FROM midas.adms WHERE id = %s",
         (user_id,),
     ).fetchone()
     if not row:
@@ -207,10 +201,10 @@ def get_user_context(user_type: UserType, user_id: int) -> dict[str, Any]:
             enterprises = _rows(
                 cursor.execute(
                     """
-                        SELECT id, name, email, document_number, telephone, id_address
+                        SELECT name
                         FROM midas.enterprises
                         WHERE id = ANY(%s)
-                        ORDER BY id
+                        ORDER BY name
                         """,
                     (enterprise_ids,),
                 )
@@ -221,14 +215,11 @@ def get_user_context(user_type: UserType, user_id: int) -> dict[str, Any]:
                 cursor.execute(
                     """
                         SELECT
-                            f.id,
                             f.name,
                             f.area_property,
                             f.region,
                             f.poultry_capacity,
                             f.place,
-                            f.id_address,
-                            f.id_enterprise,
                             a.state,
                             a.city
                         FROM midas.farms AS f
