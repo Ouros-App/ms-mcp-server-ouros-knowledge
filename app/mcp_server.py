@@ -1,8 +1,8 @@
 from typing import Annotated, Any
 
 from mcp.server.auth.settings import AuthSettings
-from pydantic import Field
 from mcp.server.fastmcp import FastMCP
+from pydantic import Field
 
 from app.core.config import settings
 from app.services.auth import (
