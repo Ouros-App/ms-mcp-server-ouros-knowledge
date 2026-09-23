@@ -167,7 +167,7 @@ Authorization: Bearer <DELEGATED_KEYCLOAK_ACCESS_TOKEN>
 | `search_knowledge` | `query`, `limit` opcional entre 1 e 20 | Busca trechos similares no Qdrant e retorna conteúdo, metadata e score. |
 | `qdrant_status` | nenhum | Verifica conectividade e existência da coleção sem chamar a NVIDIA. |
 | `postgres_status` | nenhum | Testa a conexão PostgreSQL e informa database e usuário conectados. |
-| `get_user_context` | nenhum | Retorna perfil e empresas/farms da identidade assinada no JWT. |
+| `get_user_context` | nenhum | Retorna somente contexto operacional necessário da identidade assinada no JWT. E-mail, documento, telefone e IDs de escopo não são expostos ao modelo. |
 | `get_user_farm_data` | `limit` opcional entre 1 e 100 | Retorna farms, metas, consumos, lotes e dicas da identidade assinada no JWT. |
 | `get_consumption_summary` | `period_days` opcional entre 1 e 366 | Agrega água e energia somente nas farms autorizadas pelo JWT. Água é retornada como diferença de leitura do hidrômetro, sem conversão de unidade não definida; energia usa kWh. |
 | `prepare_resource_import` | `filename`, `content_type`, `encoded_file` | Disponível apenas para `farm_owner`; converte PDF/XLSX e retorna uma prévia para revisão, sem gravar. |
@@ -186,7 +186,7 @@ Exemplo de argumentos:
 }
 ```
 
-O `ms-ai-server` não encaminha o token bruto do Android. Ele autentica o usuário, faz Standard Token Exchange v2 com um client confidencial e envia ao MCP o token resultante. O MCP valida novamente assinatura, issuer, audience, `azp=ms-ai-server-mcp-exchange`, expiração, role e claims de negócio; o banco aplica o escopo final de dados. As tools agregadas seguem o mesmo modelo de autorização e não expõem SQL arbitrário nem aceitam `farm_id`/ `user_id` vindos do modelo.
+O `ms-ai-server` não encaminha o token bruto do Android. Ele autentica o usuário, faz Standard Token Exchange v2 com um client confidencial e envia ao MCP o token resultante. O MCP valida novamente assinatura, issuer, audience, `azp=ms-ai-server-mcp-exchange`, expiração, role e claims de negócio; o banco aplica o escopo final de dados. As tools agregadas seguem o mesmo modelo de autorização e não expõem SQL arbitrário nem aceitam `farm_id`/ `user_id` vindos do modelo. O contexto de usuário também aplica minimização de dados: consultas internas usam os IDs necessários para resolver o escopo, mas a resposta pública contém apenas campos operacionais legíveis.
 
 ## Ingestão de documentos
 
