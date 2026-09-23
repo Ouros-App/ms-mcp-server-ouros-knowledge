@@ -37,13 +37,14 @@ def health_check() -> HealthResponse:
 @router.get("/metrics", include_in_schema=False)
 def metrics(request: Request) -> Response:
     """Expose low-cardinality Prometheus metrics to the telemetry collector."""
-    if not settings.METRICS_TOKEN:
+    configured = settings.METRICS_TOKEN
+    if configured is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Métricas não configuradas.",
         )
-    supplied = request.headers.get("Authorization", "")
-    expected = f"Bearer {settings.METRICS_TOKEN}"
+    supplied = request.headers.get("Authorization", "").encode()
+    expected = f"Bearer {configured.get_secret_value()}".encode()
     if not compare_digest(supplied, expected):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
