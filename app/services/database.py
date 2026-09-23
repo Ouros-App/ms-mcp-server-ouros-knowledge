@@ -231,10 +231,15 @@ def get_user_context(user_type: UserType, user_id: int) -> dict[str, Any]:
                 )
             )
 
+    public_profile = {
+        key: _json_safe(profile[key])
+        for key in ("name",)
+        if profile.get(key) is not None
+    }
     return {
         "user_type": user_type,
         "user_id": user_id,
-        "profile": _json_safe(profile),
+        "profile": public_profile,
         "enterprises": enterprises,
         "farms": farms,
     }
