@@ -422,7 +422,6 @@ def get_consumption_summary(
                     f.place,
                     a.state,
                     a.city,
-                    f.chickens_now,
                     COALESCE(w.water_records, 0) AS water_records,
                     w.first_water_record,
                     w.last_water_record,
