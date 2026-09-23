@@ -69,6 +69,12 @@ def _validate_limit(limit: int) -> None:
         raise ValueError("limit deve estar entre 1 e 100")
 
 
+def _validate_period_days(period_days: int) -> None:
+    """Bound aggregate queries to a reasonable read-only time window."""
+    if isinstance(period_days, bool) or not 1 <= period_days <= 366:
+        raise ValueError("period_days deve estar entre 1 e 366")
+
+
 def import_resource_records(
     user_type: UserType,
     user_id: int,
@@ -211,17 +217,20 @@ def get_user_context(user_type: UserType, user_id: int) -> dict[str, Any]:
                 cursor.execute(
                     """
                         SELECT
-                            id,
-                            name,
-                            area_property,
-                            region,
-                            poultry_capacity,
-                            place,
-                            id_address,
-                            id_enterprise
-                        FROM midas.farms
-                        WHERE id = ANY(%s)
-                        ORDER BY id
+                            f.id,
+                            f.name,
+                            f.area_property,
+                            f.region,
+                            f.poultry_capacity,
+                            f.place,
+                            f.id_address,
+                            f.id_enterprise,
+                            a.state,
+                            a.city
+                        FROM midas.farms AS f
+                        LEFT JOIN midas.addresses AS a ON a.id = f.id_address
+                        WHERE f.id = ANY(%s)
+                        ORDER BY f.id
                         """,
                     (farm_ids,),
                 )
@@ -257,11 +266,13 @@ def get_user_farm_data(
             "farms": _rows(
                 cursor.execute(
                     """
-                        SELECT id, name, area_property, region,
-                               poultry_capacity, place, id_address, id_enterprise
-                        FROM midas.farms
-                        WHERE id = ANY(%s)
-                        ORDER BY id
+                        SELECT f.id, f.name, f.area_property, f.region,
+                               f.poultry_capacity, f.place, f.id_address,
+                               f.id_enterprise, a.state, a.city
+                        FROM midas.farms AS f
+                        LEFT JOIN midas.addresses AS a ON a.id = f.id_address
+                        WHERE f.id = ANY(%s)
+                        ORDER BY f.id
                         LIMIT %s
                         """,
                     (farm_ids, limit),
@@ -350,4 +361,77 @@ def get_user_farm_data(
         "user_id": user_id,
         "farm_ids": farm_ids,
         "data": data,
+    }
+
+
+def get_consumption_summary(
+    user_type: UserType,
+    user_id: int,
+    period_days: int = 30,
+) -> dict[str, Any]:
+    """Return scoped aggregate water/energy data without exposing arbitrary SQL."""
+    _validate_user(user_type, user_id)
+    _validate_period_days(period_days)
+
+    with _connect() as connection, connection.cursor() as cursor:
+        _, farm_ids, _ = _resolve_user_scope(cursor, user_type, user_id)
+        if not farm_ids:
+            return {
+                "user_type": user_type,
+                "user_id": user_id,
+                "farm_ids": [],
+                "period_days": period_days,
+                "summaries": [],
+            }
+
+        summaries = _rows(
+            cursor.execute(
+                """
+                SELECT
+                    f.id AS id_farm,
+                    f.name AS farm_name,
+                    f.region,
+                    f.place,
+                    a.state,
+                    a.city,
+                    f.chickens_now,
+                    COUNT(DISTINCT w.id) AS water_records,
+                    MIN(w.registration_date) AS first_water_record,
+                    MAX(w.registration_date) AS last_water_record,
+                    COALESCE(
+                        SUM(w.end_hydrometer - w.start_hydrometer),
+                        0
+                    ) AS water_meter_delta,
+                    COUNT(DISTINCT e.id) AS energy_records,
+                    MIN(e.registration_date) AS first_energy_record,
+                    MAX(e.registration_date) AS last_energy_record,
+                    COALESCE(SUM(e.energy_consumption), 0) AS energy_consumption_kwh
+                FROM midas.farms AS f
+                LEFT JOIN midas.addresses AS a ON a.id = f.id_address
+                LEFT JOIN midas.water_registries AS w
+                    ON w.id_farm = f.id
+                   AND w.registration_date >= CURRENT_DATE - (%s - 1)
+                   AND w.registration_date <= CURRENT_DATE
+                LEFT JOIN midas.energy_registries AS e
+                    ON e.id_farm = f.id
+                   AND e.registration_date >= CURRENT_DATE - (%s - 1)
+                   AND e.registration_date <= CURRENT_DATE
+                WHERE f.id = ANY(%s)
+                GROUP BY
+                    f.id, f.name, f.region, f.place, a.state, a.city,
+                    f.chickens_now
+                ORDER BY f.id
+                """,
+                (period_days, period_days, farm_ids),
+            )
+        )
+
+    return {
+        "user_type": user_type,
+        "user_id": user_id,
+        "farm_ids": farm_ids,
+        "period_days": period_days,
+        "water_unit": "hydrometer_reading_delta",
+        "energy_unit": "kWh",
+        "summaries": summaries,
     }
