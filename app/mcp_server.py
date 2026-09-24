@@ -53,7 +53,7 @@ def search_knowledge(
         int,
         Field(
             ge=1,
-            le=20,
+            le=settings.SEARCH_MAX_K,
             description="Quantidade maxima de trechos retornados.",
         ),
     ] = settings.SEARCH_TOP_K,
