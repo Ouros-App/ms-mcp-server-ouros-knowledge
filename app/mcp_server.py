@@ -16,17 +16,9 @@ from app.services.database import (
     MAX_CONSUMPTION_PERIOD_DAYS,
     MAX_FARM_DATA_LIMIT,
     get_consumption_summary as get_database_consumption_summary,
-)
-from app.services.database import (
     get_user_context as get_database_user_context,
-)
-from app.services.database import (
     get_user_farm_data as get_database_user_farm_data,
-)
-from app.services.database import (
     import_resource_records as get_database_import_resource_records,
-)
-from app.services.database import (
     postgres_status as get_postgres_status,
 )
 from app.services.imports import extract_resource_records, file_to_markdown
@@ -63,7 +55,7 @@ def search_knowledge(
 
     Args:
         query: Natural-language question or search phrase.
-        limit: Number of matches to return, from 1 to 20.
+        limit: Number of matches to return within the configured search ceiling.
     """
     with observe_tool("search_knowledge"):
         if not query.strip():
@@ -101,8 +93,12 @@ def get_user_context() -> dict[str, Any]:
 def get_user_farm_data(
     limit: Annotated[
         int,
-        Field(ge=1, le=100, description="Quantidade maxima por conjunto de dados."),
-    ] = 20,
+        Field(
+            ge=1,
+            le=MAX_FARM_DATA_LIMIT,
+            description="Quantidade maxima por conjunto de dados.",
+        ),
+    ] = DEFAULT_FARM_DATA_LIMIT,
 ) -> dict[str, Any]:
     """Load bounded farm data for the authenticated Keycloak identity."""
     with observe_tool("get_user_farm_data"):
