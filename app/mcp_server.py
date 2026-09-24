@@ -5,6 +5,7 @@ from mcp.server.fastmcp import FastMCP
 from pydantic import Field
 
 from app.core.config import settings
+from app.core.identity import FARM_OWNER_USER_TYPE
 from app.services.auth import (
     KeycloakTokenVerifier,
     get_authenticated_identity,
@@ -139,8 +140,10 @@ def import_user_resource_records(
 ) -> dict[str, Any]:
     """Import historical records for the authenticated farm owner."""
     user_type, user_id = get_authenticated_identity()
-    if user_type != "farm_owner":
-        raise PermissionError("somente farm_owner pode importar registros")
+    if user_type != FARM_OWNER_USER_TYPE:
+        raise PermissionError(
+            f"somente {FARM_OWNER_USER_TYPE} pode importar registros"
+        )
     return get_database_import_resource_records(
         user_type,
         user_id,
