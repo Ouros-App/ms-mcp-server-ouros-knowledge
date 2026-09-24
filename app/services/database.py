@@ -81,7 +81,10 @@ def _validate_period_days(period_days: int) -> None:
         or not isinstance(period_days, int)
         or not 1 <= period_days <= MAX_CONSUMPTION_PERIOD_DAYS
     ):
-        raise ValueError("period_days deve ser um inteiro entre 1 e 366")
+        raise ValueError(
+            "period_days deve ser um inteiro entre 1 e "
+            f"{MAX_CONSUMPTION_PERIOD_DAYS}"
+        )
 
 
 def import_resource_records(
