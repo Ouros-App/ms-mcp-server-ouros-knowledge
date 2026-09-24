@@ -1,7 +1,7 @@
 import json
 from datetime import date, datetime, time
 from decimal import Decimal
-from typing import Any, Literal, get_args
+from typing import Any
 from uuid import UUID
 
 import psycopg
@@ -9,9 +9,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from app.core.config import settings
-
-UserType = Literal["farm_owner", "company_employee", "admin"]
-VALID_USER_TYPES = frozenset(get_args(UserType))
+from app.core.identity import USER_TYPE_ERROR, UserType, VALID_USER_TYPES
 
 DEFAULT_FARM_DATA_LIMIT = 20
 MAX_FARM_DATA_LIMIT = 100
@@ -63,7 +61,7 @@ def _rows(cursor: Any) -> list[dict[str, Any]]:
 def _validate_user(user_type: str, user_id: int) -> None:
     """Validate the supported user identity shape."""
     if user_type not in VALID_USER_TYPES:
-        raise ValueError("user_type deve ser farm_owner, company_employee ou admin")
+        raise ValueError(USER_TYPE_ERROR)
     if user_id <= 0:
         raise ValueError("user_id deve ser maior que zero")
 
