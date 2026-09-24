@@ -5,6 +5,7 @@ from mcp.server.fastmcp import FastMCP
 from pydantic import Field
 
 from app.core.config import settings
+from app.core.identity import FARM_OWNER_USER_TYPE
 from app.core.metrics import observe_tool
 from app.services.auth import (
     KeycloakTokenVerifier,
