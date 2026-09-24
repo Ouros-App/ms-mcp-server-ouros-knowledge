@@ -10,6 +10,10 @@ from app.services.auth import (
     get_authenticated_identity,
 )
 from app.services.database import (
+    DEFAULT_CONSUMPTION_PERIOD_DAYS,
+    DEFAULT_FARM_DATA_LIMIT,
+    MAX_CONSUMPTION_PERIOD_DAYS,
+    MAX_FARM_DATA_LIMIT,
     get_consumption_summary as get_database_consumption_summary,
 )
 from app.services.database import (
@@ -47,7 +51,11 @@ def search_knowledge(
     query: str,
     limit: Annotated[
         int,
-        Field(ge=1, le=20, description="Quantidade maxima de trechos retornados."),
+        Field(
+            ge=1,
+            le=20,
+            description="Quantidade maxima de trechos retornados.",
+        ),
     ] = settings.SEARCH_TOP_K,
 ) -> list[dict[str, Any]]:
     """Search Qdrant using NVIDIA embeddings.
@@ -98,8 +106,12 @@ def get_user_farm_data(
 def get_consumption_summary(
     period_days: Annotated[
         int,
-        Field(ge=1, le=366, description="Janela de consumo em dias."),
-    ] = 30,
+        Field(
+            ge=1,
+            le=MAX_CONSUMPTION_PERIOD_DAYS,
+            description="Janela de consumo em dias.",
+        ),
+    ] = DEFAULT_CONSUMPTION_PERIOD_DAYS,
 ) -> dict[str, Any]:
     """Aggregate scoped water and energy records for the authenticated identity.
 
