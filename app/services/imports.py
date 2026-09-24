@@ -130,19 +130,26 @@ def extract_resource_records(markdown: str, source_name: str) -> dict[str, Any]:
         "end_hydrometer, energy_consumption, source_row e confidence. "
         "Não invente valores; use null quando ausente. Documento: " + source_name
     )
-    payload = {"model": settings.NVIDIA_NIM_MODEL, "temperature": 0,
-               "response_format": {"type": "json_object"},
-               "messages": [{"role": "system", "content": prompt},
-                            {"role": "user", "content": markdown}]}
-    request = Request(settings.NVIDIA_NIM_URL, data=json.dumps(payload).encode(),
-                      headers={
-                          "Authorization": (
-                              "Bearer "
-                              + settings.NVIDIA_API_KEY.get_secret_value()
-                          ),
-                          "Content-Type": "application/json",
-                      },
-                      method="POST")
+    payload = {
+        "model": settings.NVIDIA_NIM_MODEL,
+        "temperature": 0,
+        "response_format": {"type": "json_object"},
+        "messages": [
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": markdown},
+        ],
+    }
+    request = Request(
+        settings.NVIDIA_NIM_URL,
+        data=json.dumps(payload).encode(),
+        headers={
+            "Authorization": (
+                "Bearer " + settings.NVIDIA_API_KEY.get_secret_value()
+            ),
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
     try:
         with urlopen(request, timeout=settings.NVIDIA_NIM_TIMEOUT) as response:
             body = json.loads(response.read())
