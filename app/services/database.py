@@ -10,7 +10,6 @@ from psycopg.types.json import Jsonb
 
 from app.core.config import settings
 from app.core.identity import (
-    ADMIN_USER_TYPE,
     COMPANY_EMPLOYEE_USER_TYPE,
     FARM_OWNER_USER_TYPE,
     USER_TYPE_ERROR,
