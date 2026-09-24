@@ -9,7 +9,14 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from app.core.config import settings
-from app.core.identity import USER_TYPE_ERROR, VALID_USER_TYPES, UserType
+from app.core.identity import (
+    ADMIN_USER_TYPE,
+    COMPANY_EMPLOYEE_USER_TYPE,
+    FARM_OWNER_USER_TYPE,
+    USER_TYPE_ERROR,
+    VALID_USER_TYPES,
+    UserType,
+)
 
 DEFAULT_FARM_DATA_LIMIT = 20
 MAX_FARM_DATA_LIMIT = 100
@@ -116,7 +123,10 @@ def import_resource_records(
         raise ValueError("cada registro deve ser um objeto JSON")
     serialized_payload = json.dumps(records)
     if len(serialized_payload.encode("utf-8")) > MAX_IMPORT_PAYLOAD_BYTES:
-        raise ValueError("payload de importação excede 1 MiB")
+        raise ValueError(
+            "payload de importação excede "
+            f"{MAX_IMPORT_PAYLOAD_BYTES // (1024 * 1024)} MiB"
+        )
     payload = Jsonb(records, dumps=lambda _value: serialized_payload)
 
     with _connect_import() as connection:
@@ -140,7 +150,7 @@ def _resolve_user_scope(
     user_id: int,
 ) -> tuple[dict[str, Any], list[int], list[int]]:
     """Resolve a user and the farms and enterprises they may access."""
-    if user_type == "farm_owner":
+    if user_type == FARM_OWNER_USER_TYPE:
         row = cursor.execute(
             """
             SELECT
@@ -158,7 +168,7 @@ def _resolve_user_scope(
             raise ValueError(USER_NOT_FOUND)
         return dict(row), [row["farm_id"]], [row["enterprise_id"]]
 
-    if user_type == "company_employee":
+    if user_type == COMPANY_EMPLOYEE_USER_TYPE:
         row = cursor.execute(
             """
             SELECT
