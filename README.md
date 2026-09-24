@@ -80,7 +80,7 @@ Preencha os valores necessários no `.env`:
 | `QDRANT_COLLECTION_NAME` | `ouros_knowledge` | Coleção usada na busca e na ingestão. |
 | `NVIDIA_API_KEY` | vazio | Chave da NVIDIA AI Endpoints. |
 | `NVIDIA_BASE_URL` | `https://integrate.api.nvidia.com/v1` | Endpoint da API de embeddings. |
-| `NVIDIA_EMBEDDING_MODEL` | `nvidia/llama-nemotron-embed-1b-v2` | Modelo usado para gerar embeddings. |
+| `NVIDIA_EMBEDDING_MODEL` | `nvidia/nemotron-3-embed-1b` | Modelo usado para gerar embeddings. |
 | `SEARCH_TOP_K` | `5` | Quantidade padrão de resultados da busca. |
 | `MIDAS_DATABASE_URL` | vazio | URL de conexão PostgreSQL somente leitura do MIDAS. |
 | `MIDAS_IMPORT_DATABASE_URL` | vazio | URL exclusiva da role `midas_importer`, com `EXECUTE` apenas na função de importação. |
@@ -105,7 +105,7 @@ QDRANT_COLLECTION_NAME=ouros_knowledge
 
 NVIDIA_API_KEY=nvapi-...
 NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1
-NVIDIA_EMBEDDING_MODEL=nvidia/llama-nemotron-embed-1b-v2
+NVIDIA_EMBEDDING_MODEL=nvidia/nemotron-3-embed-1b
 
 MIDAS_DATABASE_URL=postgresql://midas_ro:senha@host/segundo_prod?sslmode=require&channel_binding=require
 MIDAS_IMPORT_DATABASE_URL=postgresql://midas_importer:senha@host/segundo_prod?sslmode=require&channel_binding=require
