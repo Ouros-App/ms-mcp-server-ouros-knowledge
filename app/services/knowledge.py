@@ -10,9 +10,9 @@ from app.core.config import settings
 
 def _require_nvidia_key() -> str:
     """Return the configured NVIDIA API key or fail clearly."""
-    if not settings.NVIDIA_API_KEY:
-        raise RuntimeError("NVIDIA_API_KEY não está configurada no .env")
-    return settings.NVIDIA_API_KEY
+    if settings.NVIDIA_API_KEY is None:
+        raise RuntimeError("NVIDIA_API_KEY não está configurada no ambiente")
+    return settings.NVIDIA_API_KEY.get_secret_value()
 
 
 @lru_cache(maxsize=1)
@@ -20,7 +20,11 @@ def get_qdrant_client() -> QdrantClient:
     """Create and cache the configured Qdrant client."""
     return QdrantClient(
         url=settings.QDRANT_URL,
-        api_key=settings.QDRANT_API_KEY or None,
+        api_key=(
+            settings.QDRANT_API_KEY.get_secret_value()
+            if settings.QDRANT_API_KEY is not None
+            else None
+        ),
     )
 
 
