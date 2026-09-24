@@ -81,6 +81,7 @@ Preencha os valores necessários no `.env`:
 | `NVIDIA_BASE_URL` | `https://integrate.api.nvidia.com/v1` | Endpoint da API de embeddings. |
 | `NVIDIA_EMBEDDING_MODEL` | `nvidia/nemotron-3-embed-1b` | Modelo usado para gerar embeddings. |
 | `SEARCH_TOP_K` | `5` | Quantidade padrão de resultados da busca. |
+| `SEARCH_MAX_K` | `20` | Teto configurável de resultados aceitos por chamada. |
 | `MIDAS_DATABASE_URL` | vazio | URL de conexão PostgreSQL somente leitura do MIDAS. |
 | `MIDAS_IMPORT_DATABASE_URL` | vazio | URL exclusiva da role `midas_importer`, com `EXECUTE` apenas na função de importação. |
 | `MIDAS_DB_CONNECT_TIMEOUT` | `10` | Timeout da conexão PostgreSQL, em segundos. |
