@@ -22,10 +22,10 @@ USER_NOT_FOUND = "usuário não encontrado"
 
 def _connect() -> psycopg.Connection:
     """Open a PostgreSQL connection using the configured read-only URL."""
-    if not settings.MIDAS_DATABASE_URL:
-        raise RuntimeError("MIDAS_DATABASE_URL não está configurada no .env")
+    if settings.MIDAS_DATABASE_URL is None:
+        raise RuntimeError("MIDAS_DATABASE_URL não está configurada no ambiente")
     return psycopg.connect(
-        settings.MIDAS_DATABASE_URL,
+        settings.MIDAS_DATABASE_URL.get_secret_value(),
         connect_timeout=settings.MIDAS_DB_CONNECT_TIMEOUT,
         row_factory=dict_row,
     )
@@ -33,10 +33,12 @@ def _connect() -> psycopg.Connection:
 
 def _connect_import() -> psycopg.Connection:
     """Open the restricted database connection used only for imports."""
-    if not settings.MIDAS_IMPORT_DATABASE_URL:
-        raise RuntimeError("MIDAS_IMPORT_DATABASE_URL não está configurada no .env")
+    if settings.MIDAS_IMPORT_DATABASE_URL is None:
+        raise RuntimeError(
+            "MIDAS_IMPORT_DATABASE_URL não está configurada no ambiente"
+        )
     return psycopg.connect(
-        settings.MIDAS_IMPORT_DATABASE_URL,
+        settings.MIDAS_IMPORT_DATABASE_URL.get_secret_value(),
         connect_timeout=settings.MIDAS_DB_CONNECT_TIMEOUT,
         row_factory=dict_row,
     )
