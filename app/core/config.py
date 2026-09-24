@@ -1,4 +1,4 @@
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.core.infisical import load_infisical_secrets
@@ -24,8 +24,8 @@ class Settings(BaseSettings):
     NVIDIA_NIM_MODEL: str = "meta/llama-3.1-70b-instruct"
     NVIDIA_NIM_TIMEOUT: int = 60
     IMPORT_MARKDOWN_MAX_CHARS: int = 120_000
-    SEARCH_TOP_K: int = 5
-    SEARCH_MAX_K: int = 20
+    SEARCH_TOP_K: int = Field(default=5, ge=1)
+    SEARCH_MAX_K: int = Field(default=20, ge=1)
     MIDAS_DATABASE_URL: str | None = None
     MIDAS_IMPORT_DATABASE_URL: str | None = None
     MIDAS_DB_CONNECT_TIMEOUT: int = 10
@@ -37,6 +37,11 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_keycloak_jwt_config(self) -> "Settings":
+        if self.SEARCH_MAX_K < self.SEARCH_TOP_K:
+            raise ValueError(
+                "SEARCH_MAX_K deve ser maior ou igual a SEARCH_TOP_K"
+            )
+
         self.MCP_JWT_ISSUER = self.MCP_JWT_ISSUER.strip()
         self.MCP_JWT_AUDIENCE = self.MCP_JWT_AUDIENCE.strip()
         self.MCP_JWT_AUTHORIZED_PARTY = self.MCP_JWT_AUTHORIZED_PARTY.strip()
