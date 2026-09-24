@@ -6,6 +6,7 @@ from pydantic import Field
 
 from app.core.config import settings
 from app.core.identity import FARM_OWNER_USER_TYPE
+from app.core.metrics import observe_tool
 from app.services.auth import (
     KeycloakTokenVerifier,
     get_authenticated_identity,
@@ -67,32 +68,36 @@ def search_knowledge(
         query: Natural-language question or search phrase.
         limit: Number of matches to return within the configured search ceiling.
     """
-    if not query.strip():
-        raise ValueError("query não pode ser vazio")
-    if not 1 <= limit <= settings.SEARCH_MAX_K:
-        raise ValueError(
-            f"limit deve estar entre 1 e {settings.SEARCH_MAX_K}"
-        )
-    return search_qdrant(query.strip(), limit)
+    with observe_tool("search_knowledge"):
+        if not query.strip():
+            raise ValueError("query não pode ser vazio")
+        if not 1 <= limit <= settings.SEARCH_MAX_K:
+            raise ValueError(
+                f"limit deve estar entre 1 e {settings.SEARCH_MAX_K}"
+            )
+        return search_qdrant(query.strip(), limit)
 
 
 @mcp.tool()
 def qdrant_status() -> dict[str, Any]:
     """Check whether the configured Qdrant collection is reachable."""
-    return get_qdrant_status()
+    with observe_tool("qdrant_status"):
+        return get_qdrant_status()
 
 
 @mcp.tool()
 def postgres_status() -> dict[str, Any]:
     """Check whether the MIDAS read-only PostgreSQL connection is reachable."""
-    return get_postgres_status()
+    with observe_tool("postgres_status"):
+        return get_postgres_status()
 
 
 @mcp.tool()
 def get_user_context() -> dict[str, Any]:
     """Load profile and linked farms for the authenticated Keycloak identity."""
-    user_type, user_id = get_authenticated_identity()
-    return get_database_user_context(user_type, user_id)
+    with observe_tool("get_user_context"):
+        user_type, user_id = get_authenticated_identity()
+        return get_database_user_context(user_type, user_id)
 
 
 @mcp.tool()
@@ -107,8 +112,9 @@ def get_user_farm_data(
     ] = DEFAULT_FARM_DATA_LIMIT,
 ) -> dict[str, Any]:
     """Load bounded farm data for the authenticated Keycloak identity."""
-    user_type, user_id = get_authenticated_identity()
-    return get_database_user_farm_data(user_type, user_id, limit)
+    with observe_tool("get_user_farm_data"):
+        user_type, user_id = get_authenticated_identity()
+        return get_database_user_farm_data(user_type, user_id, limit)
 
 
 @mcp.tool()
@@ -127,8 +133,9 @@ def get_consumption_summary(
     The tool never accepts user_id or farm_id. Scope is derived exclusively from
     the delegated Keycloak token and the PostgreSQL relationship model.
     """
-    user_type, user_id = get_authenticated_identity()
-    return get_database_consumption_summary(user_type, user_id, period_days)
+    with observe_tool("get_consumption_summary"):
+        user_type, user_id = get_authenticated_identity()
+        return get_database_consumption_summary(user_type, user_id, period_days)
 
 
 @mcp.tool()
@@ -139,19 +146,18 @@ def import_user_resource_records(
     records: list[dict[str, Any]],
 ) -> dict[str, Any]:
     """Import historical records for the authenticated farm owner."""
-    user_type, user_id = get_authenticated_identity()
-    if user_type != FARM_OWNER_USER_TYPE:
-        raise PermissionError(
-            f"somente {FARM_OWNER_USER_TYPE} pode importar registros"
+    with observe_tool("import_user_resource_records"):
+        user_type, user_id = get_authenticated_identity()
+        if user_type != "farm_owner":
+            raise PermissionError("somente farm_owner pode importar registros")
+        return get_database_import_resource_records(
+            user_type,
+            user_id,
+            request_id,
+            source_type,
+            source_name,
+            records,
         )
-    return get_database_import_resource_records(
-        user_type,
-        user_id,
-        request_id,
-        source_type,
-        source_name,
-        records,
-    )
 
 
 @mcp.tool()
@@ -165,7 +171,8 @@ def prepare_resource_import(
     This tool never writes to PostgreSQL. The returned records must be reviewed
     and explicitly sent to import_user_resource_records afterward.
     """
-    if not filename.strip():
-        raise ValueError("filename não pode ser vazio")
-    markdown = file_to_markdown(content_type, encoded_file)
-    return extract_resource_records(markdown, filename.strip())
+    with observe_tool("prepare_resource_import"):
+        if not filename.strip():
+            raise ValueError("filename não pode ser vazio")
+        markdown = file_to_markdown(content_type, encoded_file)
+        return extract_resource_records(markdown, filename.strip())

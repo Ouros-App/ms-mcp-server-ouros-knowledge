@@ -1,5 +1,10 @@
-from fastapi import APIRouter
+from secrets import compare_digest
 
+from fastapi import APIRouter, HTTPException, Request, Response, status
+from prometheus_client import CONTENT_TYPE_LATEST
+
+from app.core.config import settings
+from app.core.metrics import metrics_payload
 from app.schemas.common import HealthResponse, MessageResponse
 
 router = APIRouter(tags=["Operação"])
@@ -27,3 +32,22 @@ def read_root() -> MessageResponse:
 def health_check() -> HealthResponse:
     """Return the service health status."""
     return HealthResponse(status="ok")
+
+
+@router.get("/metrics", include_in_schema=False)
+def metrics(request: Request) -> Response:
+    """Expose low-cardinality Prometheus metrics to the telemetry collector."""
+    configured = settings.METRICS_TOKEN
+    if configured is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Métricas não configuradas.",
+        )
+    supplied = request.headers.get("Authorization", "").encode()
+    expected = f"Bearer {configured.get_secret_value()}".encode()
+    if not compare_digest(supplied, expected):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Métricas não autorizadas.",
+        )
+    return Response(content=metrics_payload(), media_type=CONTENT_TYPE_LATEST)
