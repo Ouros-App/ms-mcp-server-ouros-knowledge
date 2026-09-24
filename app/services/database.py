@@ -1,7 +1,7 @@
 import json
 from datetime import date, datetime, time
 from decimal import Decimal
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 from uuid import UUID
 
 import psycopg
@@ -11,7 +11,12 @@ from psycopg.types.json import Jsonb
 from app.core.config import settings
 
 UserType = Literal["farm_owner", "company_employee", "admin"]
-VALID_USER_TYPES = {"farm_owner", "company_employee", "admin"}
+VALID_USER_TYPES = frozenset(get_args(UserType))
+
+DEFAULT_FARM_DATA_LIMIT = 20
+MAX_FARM_DATA_LIMIT = 100
+DEFAULT_CONSUMPTION_PERIOD_DAYS = 30
+MAX_CONSUMPTION_PERIOD_DAYS = 366
 USER_NOT_FOUND = "usuário não encontrado"
 
 
@@ -74,7 +79,7 @@ def _validate_period_days(period_days: int) -> None:
     if (
         isinstance(period_days, bool)
         or not isinstance(period_days, int)
-        or not 1 <= period_days <= 366
+        or not 1 <= period_days <= MAX_CONSUMPTION_PERIOD_DAYS
     ):
         raise ValueError("period_days deve ser um inteiro entre 1 e 366")
 
@@ -245,7 +250,9 @@ def get_user_context(user_type: UserType, user_id: int) -> dict[str, Any]:
 
 
 def get_user_farm_data(
-    user_type: UserType, user_id: int, limit: int = 20
+    user_type: UserType,
+    user_id: int,
+    limit: int = DEFAULT_FARM_DATA_LIMIT,
 ) -> dict[str, Any]:
     """Return bounded farm records scoped to the user's linked farms."""
     _validate_user(user_type, user_id)
@@ -366,7 +373,7 @@ def get_user_farm_data(
 def get_consumption_summary(
     user_type: UserType,
     user_id: int,
-    period_days: int = 30,
+    period_days: int = DEFAULT_CONSUMPTION_PERIOD_DAYS,
 ) -> dict[str, Any]:
     """Return scoped aggregate water/energy data without exposing arbitrary SQL."""
     _validate_user(user_type, user_id)
