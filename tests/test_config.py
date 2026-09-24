@@ -43,6 +43,26 @@ class ConfigAuthTests(unittest.TestCase):
             "ms-ai-server-mcp-exchange",
         )
 
+    def test_search_bounds_are_validated(self) -> None:
+        with self.assertRaises(ValidationError):
+            Settings(
+                _env_file=None,
+                SEARCH_TOP_K=0,
+            )
+
+        with self.assertRaises(ValidationError):
+            Settings(
+                _env_file=None,
+                SEARCH_MAX_K=0,
+            )
+
+        with self.assertRaises(ValidationError):
+            Settings(
+                _env_file=None,
+                SEARCH_TOP_K=10,
+                SEARCH_MAX_K=5,
+            )
+
     def test_blank_keycloak_jwt_config_is_rejected(self) -> None:
         with self.assertRaises(ValidationError):
             Settings(
