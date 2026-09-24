@@ -85,4 +85,8 @@ class InfisicalTests(unittest.TestCase):
 
             importlib.reload(config)
 
-        self.assertEqual(config.settings.QDRANT_API_KEY, "loaded-token")
+        self.assertIsNotNone(config.settings.QDRANT_API_KEY)
+        self.assertEqual(
+            config.settings.QDRANT_API_KEY.get_secret_value(),
+            "loaded-token",
+        )
