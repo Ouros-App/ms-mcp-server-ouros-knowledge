@@ -15,6 +15,8 @@ DEFAULT_FARM_DATA_LIMIT = 20
 MAX_FARM_DATA_LIMIT = 100
 DEFAULT_CONSUMPTION_PERIOD_DAYS = 30
 MAX_CONSUMPTION_PERIOD_DAYS = 366
+MAX_IMPORT_RECORDS = 1_000
+MAX_IMPORT_PAYLOAD_BYTES = 1024 * 1024
 USER_NOT_FOUND = "usuário não encontrado"
 
 
@@ -70,8 +72,10 @@ def _validate_user(user_type: str, user_id: int) -> None:
 
 def _validate_limit(limit: int) -> None:
     """Validate the maximum number of records returned per collection."""
-    if not 1 <= limit <= 100:
-        raise ValueError("limit deve estar entre 1 e 100")
+    if not 1 <= limit <= MAX_FARM_DATA_LIMIT:
+        raise ValueError(
+            f"limit deve estar entre 1 e {MAX_FARM_DATA_LIMIT}"
+        )
 
 
 def _validate_period_days(period_days: int) -> None:
@@ -103,12 +107,15 @@ def import_resource_records(
         raise ValueError("request_id deve ser um UUID válido") from error
     if not source_type.strip() or not source_name.strip():
         raise ValueError("source_type e source_name não podem ser vazios")
-    if not isinstance(records, list) or len(records) > 1000:
-        raise ValueError("records deve ser uma lista com no máximo 1000 itens")
+    if not isinstance(records, list) or len(records) > MAX_IMPORT_RECORDS:
+        raise ValueError(
+            "records deve ser uma lista com no máximo "
+            f"{MAX_IMPORT_RECORDS} itens"
+        )
     if any(not isinstance(record, dict) for record in records):
         raise ValueError("cada registro deve ser um objeto JSON")
     serialized_payload = json.dumps(records)
-    if len(serialized_payload.encode("utf-8")) > 1024 * 1024:
+    if len(serialized_payload.encode("utf-8")) > MAX_IMPORT_PAYLOAD_BYTES:
         raise ValueError("payload de importação excede 1 MiB")
     payload = Jsonb(records, dumps=lambda _value: serialized_payload)
 
