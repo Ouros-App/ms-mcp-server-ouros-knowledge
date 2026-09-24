@@ -54,7 +54,7 @@ def search_knowledge(
         int,
         Field(
             ge=1,
-            le=20,
+            le=settings.SEARCH_MAX_K,
             description="Quantidade maxima de trechos retornados.",
         ),
     ] = settings.SEARCH_TOP_K,
@@ -68,8 +68,10 @@ def search_knowledge(
     with observe_tool("search_knowledge"):
         if not query.strip():
             raise ValueError("query não pode ser vazio")
-        if not 1 <= limit <= 20:
-            raise ValueError("limit deve estar entre 1 e 20")
+        if not 1 <= limit <= settings.SEARCH_MAX_K:
+            raise ValueError(
+                f"limit deve estar entre 1 e {settings.SEARCH_MAX_K}"
+            )
         return search_qdrant(query.strip(), limit)
 
 
