@@ -10,12 +10,18 @@ from pypdf import PdfReader
 
 from app.core.config import settings
 
-MAX_FILE_BYTES = 8 * 1024 * 1024
+MAX_FILE_MIB = 8
+MAX_FILE_BYTES = MAX_FILE_MIB * 1024 * 1024
 MAX_XLSX_UNCOMPRESSED_BYTES = 128 * 1024 * 1024
 MAX_XLSX_COMPRESSION_RATIO = 100
 MAX_XLSX_ROWS = 10_000
 MAX_XLSX_CELLS = 100_000
-ALLOWED_TYPES = {"application/pdf", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
+ALLOWED_TYPES = frozenset(
+    {
+        "application/pdf",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    }
+)
 DOCUMENT_TOO_LARGE = "documento convertido excede o limite de importação"
 
 
@@ -23,7 +29,10 @@ def _xlsx_sheet_lines(sheet: Any):
     """Yield bounded Markdown lines for one worksheet."""
     header: list[str] | None = None
     cell_count = 0
-    for row_number, values in enumerate(sheet.iter_rows(values_only=True), start=1):
+    for row_number, values in enumerate(
+        sheet.iter_rows(values_only=True),
+        start=1,
+    ):
         if row_number > MAX_XLSX_ROWS:
             raise ValueError("XLSX excede o limite de linhas")
         row = ["" if value is None else str(value) for value in values]
@@ -50,7 +59,10 @@ def _xlsx_to_markdown(content: bytes) -> str:
         raise RuntimeError("suporte XLSX não está instalado") from error
     with zipfile.ZipFile(BytesIO(content)) as archive:
         uncompressed_size = sum(item.file_size for item in archive.infolist())
-        compressed_size = max(sum(item.compress_size for item in archive.infolist()), 1)
+        compressed_size = max(
+            sum(item.compress_size for item in archive.infolist()),
+            1,
+        )
     if uncompressed_size > MAX_XLSX_UNCOMPRESSED_BYTES:
         raise ValueError("XLSX excede o limite descompactado")
     if uncompressed_size / compressed_size > MAX_XLSX_COMPRESSION_RATIO:
@@ -89,7 +101,9 @@ def file_to_markdown(content_type: str, encoded_file: str) -> str:
     except binascii.Error as error:
         raise ValueError("arquivo deve ser base64 válido") from error
     if not content or len(content) > MAX_FILE_BYTES:
-        raise ValueError("arquivo vazio ou maior que 8 MiB")
+        raise ValueError(
+            f"arquivo vazio ou maior que {MAX_FILE_MIB} MiB"
+        )
     if content_type == "application/pdf":
         if not content.startswith(b"%PDF"):
             raise ValueError("assinatura de PDF inválida")
@@ -116,17 +130,26 @@ def extract_resource_records(markdown: str, source_name: str) -> dict[str, Any]:
         "end_hydrometer, energy_consumption, source_row e confidence. "
         "Não invente valores; use null quando ausente. Documento: " + source_name
     )
-    payload = {"model": settings.NVIDIA_NIM_MODEL, "temperature": 0,
-               "response_format": {"type": "json_object"},
-               "messages": [{"role": "system", "content": prompt},
-                            {"role": "user", "content": markdown}]}
-    request = Request(settings.NVIDIA_NIM_URL, data=json.dumps(payload).encode(),
-                      headers={
-                          "Authorization": (
-                              "Bearer "
-                              + settings.NVIDIA_API_KEY.get_secret_value()
-                          ),
-                               "Content-Type": "application/json"}, method="POST")
+    payload = {
+        "model": settings.NVIDIA_NIM_MODEL,
+        "temperature": 0,
+        "response_format": {"type": "json_object"},
+        "messages": [
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": markdown},
+        ],
+    }
+    request = Request(
+        settings.NVIDIA_NIM_URL,
+        data=json.dumps(payload).encode(),
+        headers={
+            "Authorization": (
+                "Bearer " + settings.NVIDIA_API_KEY.get_secret_value()
+            ),
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
     try:
         with urlopen(request, timeout=settings.NVIDIA_NIM_TIMEOUT) as response:
             body = json.loads(response.read())
