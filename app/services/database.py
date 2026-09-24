@@ -9,7 +9,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from app.core.config import settings
-from app.core.identity import USER_TYPE_ERROR, UserType, VALID_USER_TYPES
+from app.core.identity import USER_TYPE_ERROR, VALID_USER_TYPES, UserType
 
 DEFAULT_FARM_DATA_LIMIT = 20
 MAX_FARM_DATA_LIMIT = 100
