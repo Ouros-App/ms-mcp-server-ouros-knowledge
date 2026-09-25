@@ -1,18 +1,24 @@
-from typing import Any
+from typing import Annotated, Any
 
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.fastmcp import FastMCP
+from pydantic import Field
 
 from app.core.config import settings
+from app.core.identity import FARM_OWNER_USER_TYPE
 from app.services.auth import (
     KeycloakTokenVerifier,
     get_authenticated_identity,
 )
 from app.services.database import (
-    get_user_context as get_database_user_context,
+    DEFAULT_CONSUMPTION_PERIOD_DAYS,
+    MAX_CONSUMPTION_PERIOD_DAYS,
 )
 from app.services.database import (
-    get_user_farm_data as get_database_user_farm_data,
+    get_consumption_summary as get_database_consumption_summary,
+)
+from app.services.database import (
+    get_user_context as get_database_user_context,
 )
 from app.services.database import (
     import_resource_records as get_database_import_resource_records,
@@ -41,18 +47,27 @@ mcp = FastMCP(
 @mcp.tool()
 def search_knowledge(
     query: str,
-    limit: int = settings.SEARCH_TOP_K,
+    limit: Annotated[
+        int,
+        Field(
+            ge=1,
+            le=settings.SEARCH_MAX_K,
+            description="Quantidade maxima de trechos retornados.",
+        ),
+    ] = settings.SEARCH_TOP_K,
 ) -> list[dict[str, Any]]:
     """Search Qdrant using NVIDIA embeddings.
 
     Args:
         query: Natural-language question or search phrase.
-        limit: Number of matches to return, from 1 to 20.
+        limit: Number of matches to return within the configured search ceiling.
     """
     if not query.strip():
         raise ValueError("query não pode ser vazio")
-    if not 1 <= limit <= 20:
-        raise ValueError("limit deve estar entre 1 e 20")
+    if not 1 <= limit <= settings.SEARCH_MAX_K:
+        raise ValueError(
+            f"limit deve estar entre 1 e {settings.SEARCH_MAX_K}"
+        )
     return search_qdrant(query.strip(), limit)
 
 
@@ -76,10 +91,23 @@ def get_user_context() -> dict[str, Any]:
 
 
 @mcp.tool()
-def get_user_farm_data(limit: int = 20) -> dict[str, Any]:
-    """Load bounded farm data for the authenticated Keycloak identity."""
+def get_consumption_summary(
+    period_days: Annotated[
+        int,
+        Field(
+            ge=1,
+            le=MAX_CONSUMPTION_PERIOD_DAYS,
+            description="Janela de consumo em dias.",
+        ),
+    ] = DEFAULT_CONSUMPTION_PERIOD_DAYS,
+) -> dict[str, Any]:
+    """Aggregate scoped water and energy records for the authenticated identity.
+
+    The tool never accepts user_id or farm_id. Scope is derived exclusively from
+    the delegated Keycloak token and the PostgreSQL relationship model.
+    """
     user_type, user_id = get_authenticated_identity()
-    return get_database_user_farm_data(user_type, user_id, limit)
+    return get_database_consumption_summary(user_type, user_id, period_days)
 
 
 @mcp.tool()
@@ -91,8 +119,10 @@ def import_user_resource_records(
 ) -> dict[str, Any]:
     """Import historical records for the authenticated farm owner."""
     user_type, user_id = get_authenticated_identity()
-    if user_type != "farm_owner":
-        raise PermissionError("somente farm_owner pode importar registros")
+    if user_type != FARM_OWNER_USER_TYPE:
+        raise PermissionError(
+            f"somente {FARM_OWNER_USER_TYPE} pode importar registros"
+        )
     return get_database_import_resource_records(
         user_type,
         user_id,

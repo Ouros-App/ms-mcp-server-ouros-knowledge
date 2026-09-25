@@ -11,8 +11,7 @@ from mcp.server.auth.middleware.auth_context import get_access_token
 from mcp.server.auth.provider import AccessToken
 
 from app.core.config import settings
-
-VALID_USER_TYPES = {"farm_owner", "company_employee", "admin"}
+from app.core.identity import VALID_USER_TYPES
 
 
 class AuthenticationKeyServiceError(RuntimeError):

@@ -8,6 +8,7 @@ from unittest.mock import patch
 from app.services.database import (
     _json_safe,
     _rows,
+    get_consumption_summary,
     get_user_context,
     get_user_farm_data,
     import_resource_records,
@@ -118,6 +119,14 @@ class DatabaseGuardTests(unittest.TestCase):
             get_user_context("unknown", 1)  # type: ignore[arg-type]
         with self.assertRaises(ValueError):
             get_user_farm_data("farm_owner", 0)
+        with self.assertRaises(ValueError):
+            get_consumption_summary("farm_owner", 1, 0)
+        with self.assertRaises(ValueError):
+            get_consumption_summary("farm_owner", 1, 367)
+        with self.assertRaises(ValueError):
+            get_consumption_summary("farm_owner", 1, 1.5)  # type: ignore[arg-type]
+        with self.assertRaises(ValueError):
+            get_consumption_summary("farm_owner", 1, True)  # type: ignore[arg-type]
 
         connect.assert_not_called()
 
@@ -149,16 +158,23 @@ class DatabaseGuardTests(unittest.TestCase):
                     "farm_id": 8,
                     "enterprise_id": 3,
                 },
-                [{"id": 3, "name": "Enterprise"}],
-                [{"id": 8, "name": "Farm"}],
+                [{"name": "Enterprise"}],
+                [{"name": "Farm", "state": "SP", "city": "Campinas"}],
             ]
         )
         connect.return_value = FakeConnection(cursor)
 
         result = get_user_context("farm_owner", 42)
 
-        self.assertEqual(result["enterprises"], [{"id": 3, "name": "Enterprise"}])
-        self.assertEqual(result["farms"], [{"id": 8, "name": "Farm"}])
+        self.assertEqual(result["profile"], {"name": "Owner"})
+        self.assertEqual(result["enterprises"], [{"name": "Enterprise"}])
+        self.assertEqual(
+            result["farms"],
+            [{"name": "Farm", "state": "SP", "city": "Campinas"}],
+        )
+        self.assertNotIn("user_id", result["profile"])
+        self.assertNotIn("farm_id", result["profile"])
+        self.assertNotIn("enterprise_id", result["profile"])
 
     @patch("app.services.database._connect")
     def test_user_context_scopes_employee_and_admin(self, connect) -> None:
@@ -166,13 +182,13 @@ class DatabaseGuardTests(unittest.TestCase):
             [
                 {"user_id": 5, "enterprise_id": 3},
                 [{"id": 8}],
-                [{"id": 3, "name": "Enterprise"}],
-                [{"id": 8, "name": "Farm"}],
+                [{"name": "Enterprise"}],
+                [{"name": "Farm"}],
             ]
         )
         connect.return_value = FakeConnection(employee_cursor)
         employee = get_user_context("company_employee", 5)
-        self.assertEqual(employee["farms"], [{"id": 8, "name": "Farm"}])
+        self.assertEqual(employee["farms"], [{"name": "Farm"}])
 
         admin_cursor = FakeCursor([{"user_id": 1, "email": "admin@test"}])
         connect.return_value = FakeConnection(admin_cursor)
@@ -224,6 +240,59 @@ class DatabaseGuardTests(unittest.TestCase):
                 "user_id": 1,
                 "farm_ids": [],
                 "data": {},
+            },
+        )
+
+
+    @patch("app.services.database._connect")
+    def test_consumption_summary_is_scoped_and_aggregated(self, connect) -> None:
+        cursor = FakeCursor(
+            [
+                {"user_id": 42, "farm_id": 8, "enterprise_id": 3},
+                [
+                    {
+                        "id_farm": 8,
+                        "farm_name": "Farm",
+                        "state": "SP",
+                        "water_records": 2,
+                        "water_meter_delta": Decimal("150.5"),
+                        "energy_records": 2,
+                        "energy_consumption_kwh": Decimal("90.0"),
+                    }
+                ],
+            ]
+        )
+        connect.return_value = FakeConnection(cursor)
+
+        result = get_consumption_summary("farm_owner", 42, 30)
+
+        self.assertEqual(result["farm_ids"], [8])
+        self.assertEqual(result["period_days"], 30)
+        self.assertEqual(result["water_unit"], "hydrometer_reading_delta")
+        self.assertEqual(result["energy_unit"], "kWh")
+        self.assertEqual(result["summaries"][0]["water_meter_delta"], 150.5)
+        query = next(query for query in cursor.queries if "WITH water AS" in query)
+        self.assertIn("id_farm = ANY(%s)", query)
+        self.assertIn("LEFT JOIN water AS w", query)
+        self.assertIn("LEFT JOIN energy AS e", query)
+        self.assertNotIn("chickens_now", query)
+
+    @patch("app.services.database._connect")
+    def test_consumption_summary_for_admin_has_no_implicit_global_scope(self, connect) -> None:
+        connect.return_value = FakeConnection(
+            FakeCursor([{"user_id": 1, "email": "admin@test"}])
+        )
+
+        self.assertEqual(
+            get_consumption_summary("admin", 1, 30),
+            {
+                "user_type": "admin",
+                "user_id": 1,
+                "farm_ids": [],
+                "period_days": 30,
+                "water_unit": "hydrometer_reading_delta",
+                "energy_unit": "kWh",
+                "summaries": [],
             },
         )
 

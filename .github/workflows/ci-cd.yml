@@ -192,9 +192,23 @@ jobs:
 
       - name: SonarCloud Scan
         uses: SonarSource/sonarqube-scan-action@v6
+        with:
+          args: "-Dsonar.qualitygate.wait=true"
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: https://sonarcloud.io
+
+      - name: Report SonarCloud PR issues
+        if: github.event_name == 'pull_request'
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -o pipefail
+          project_key="$(grep '^sonar.projectKey=' sonar-project.properties | cut -d= -f2-)"
+          curl --fail-with-body -sS -u "${SONAR_TOKEN}:" \
+            "https://sonarcloud.io/api/issues/search?componentKeys=${project_key}&pullRequest=${PR_NUMBER}&issueStatuses=OPEN,CONFIRMED&ps=100" \
+            | python -c 'import json,sys; data=json.load(sys.stdin); issues=data.get("issues"); isinstance(issues,list) or sys.exit("Resposta do SonarCloud sem lista issues valida"); [print("{} | {}:{} | {} | {}".format(i.get("rule"), i.get("component"), i.get("line"), i.get("message"), i.get("severity"))) for i in issues]'
 
       - name: Publish SonarCloud project
         env:

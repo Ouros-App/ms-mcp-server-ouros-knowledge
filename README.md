@@ -39,7 +39,8 @@ FastAPI /mcp/
 - Busca semântica com `search_knowledge(query, limit)`.
 - Diagnóstico da coleção Qdrant com `qdrant_status()`.
 - Diagnóstico da conexão PostgreSQL com `postgres_status()`.
-- Contexto personalizado com `get_user_context()` e `get_user_farm_data(limit)`.
+- Contexto personalizado minimizado com `get_user_context()`.
+- Resumo agregado e autenticado de consumo com `get_consumption_summary(period_days)`, sem aceitar IDs de usuário ou fazenda.
 - CLI para extrair, dividir, embeddar e sincronizar documentos com o Qdrant.
 - Ingestão incremental baseada em SHA-256, modelo, coleção e parâmetros de chunking.
 - Endpoints REST de disponibilidade e saúde.
@@ -78,8 +79,9 @@ Preencha os valores necessários no `.env`:
 | `QDRANT_COLLECTION_NAME` | `ouros_knowledge` | Coleção usada na busca e na ingestão. |
 | `NVIDIA_API_KEY` | vazio | Chave da NVIDIA AI Endpoints. |
 | `NVIDIA_BASE_URL` | `https://integrate.api.nvidia.com/v1` | Endpoint da API de embeddings. |
-| `NVIDIA_EMBEDDING_MODEL` | `nvidia/llama-nemotron-embed-1b-v2` | Modelo usado para gerar embeddings. |
+| `NVIDIA_EMBEDDING_MODEL` | `nvidia/nemotron-3-embed-1b` | Modelo usado para gerar embeddings. |
 | `SEARCH_TOP_K` | `5` | Quantidade padrão de resultados da busca. |
+| `SEARCH_MAX_K` | `20` | Teto configurável de resultados aceitos por chamada. |
 | `MIDAS_DATABASE_URL` | vazio | URL de conexão PostgreSQL somente leitura do MIDAS. |
 | `MIDAS_IMPORT_DATABASE_URL` | vazio | URL exclusiva da role `midas_importer`, com `EXECUTE` apenas na função de importação. |
 | `MIDAS_DB_CONNECT_TIMEOUT` | `10` | Timeout da conexão PostgreSQL, em segundos. |
@@ -102,7 +104,7 @@ QDRANT_COLLECTION_NAME=ouros_knowledge
 
 NVIDIA_API_KEY=nvapi-...
 NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1
-NVIDIA_EMBEDDING_MODEL=nvidia/llama-nemotron-embed-1b-v2
+NVIDIA_EMBEDDING_MODEL=nvidia/nemotron-3-embed-1b
 
 MIDAS_DATABASE_URL=postgresql://midas_ro:senha@host/segundo_prod?sslmode=require&channel_binding=require
 MIDAS_IMPORT_DATABASE_URL=postgresql://midas_importer:senha@host/segundo_prod?sslmode=require&channel_binding=require
@@ -166,25 +168,14 @@ Authorization: Bearer <DELEGATED_KEYCLOAK_ACCESS_TOKEN>
 | `search_knowledge` | `query`, `limit` opcional entre 1 e 20 | Busca trechos similares no Qdrant e retorna conteúdo, metadata e score. |
 | `qdrant_status` | nenhum | Verifica conectividade e existência da coleção sem chamar a NVIDIA. |
 | `postgres_status` | nenhum | Testa a conexão PostgreSQL e informa database e usuário conectados. |
-| `get_user_context` | nenhum | Retorna perfil e empresas/farms da identidade assinada no JWT. |
-| `get_user_farm_data` | `limit` opcional entre 1 e 100 | Retorna farms, metas, consumos, lotes e dicas da identidade assinada no JWT. |
+| `get_user_context` | nenhum | Retorna somente contexto operacional necessário da identidade assinada no JWT. E-mail, documento, telefone e IDs de escopo não são expostos ao modelo. |
+| `get_consumption_summary` | `period_days` opcional entre 1 e 366 | Agrega água e energia somente nas farms autorizadas pelo JWT. Água é retornada como diferença de leitura do hidrômetro, sem conversão de unidade não definida; energia usa kWh. O resumo não calcula CAA/CEA nem usa `chickens_now` como denominador, pois as métricas oficiais dependem das aves entregues do lote correspondente. |
 | `prepare_resource_import` | `filename`, `content_type`, `encoded_file` | Disponível apenas para `farm_owner`; converte PDF/XLSX e retorna uma prévia para revisão, sem gravar. |
 | `import_user_resource_records` | `request_id`, `source_type`, `source_name`, `records` | Disponível apenas para `farm_owner`; exige `request_id` UUID e confirmação explícita antes de gravar os registros. |
 
 Os tipos de conta aceitos continuam sendo `farm_owner`, `company_employee` e `admin`, mas são lidos do JWT, não enviados pelo cliente.
 
-Exemplo de argumentos:
-
-```json
-{
-  "name": "get_user_farm_data",
-  "arguments": {
-    "limit": 20
-  }
-}
-```
-
-O `ms-ai-server` não encaminha o token bruto do Android. Ele autentica o usuário, faz Standard Token Exchange v2 com um client confidencial e envia ao MCP o token resultante. O MCP valida novamente assinatura, issuer, audience, `azp=ms-ai-server-mcp-exchange`, expiração, role e claims de negócio; o banco aplica o escopo final de dados.
+O `ms-ai-server` não encaminha o token bruto do Android. Ele autentica o usuário, faz Standard Token Exchange v2 com um client confidencial e envia ao MCP o token resultante. O MCP valida novamente assinatura, issuer, audience, `azp=ms-ai-server-mcp-exchange`, expiração, role e claims de negócio; o banco aplica o escopo final de dados. As tools agregadas seguem o mesmo modelo de autorização e não expõem SQL arbitrário nem aceitam `farm_id`/ `user_id` vindos do modelo. O contexto de usuário também aplica minimização de dados: consultas internas usam os IDs necessários para resolver o escopo, mas a resposta pública contém apenas campos operacionais legíveis.
 
 ## Ingestão de documentos
 

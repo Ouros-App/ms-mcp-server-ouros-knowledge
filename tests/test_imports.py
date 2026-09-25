@@ -6,6 +6,7 @@ from typing import Self
 from unittest.mock import patch
 
 from openpyxl import Workbook
+from pydantic import SecretStr
 
 from app.services.imports import extract_resource_records, file_to_markdown
 
@@ -71,7 +72,10 @@ class ImportTests(unittest.TestCase):
         body = {"choices": [{"message": {"content": json.dumps({"records": []})}}]}
         response = FakeResponse(body)
         with (
-            patch("app.services.imports.settings.NVIDIA_API_KEY", "token"),
+            patch(
+                "app.services.imports.settings.NVIDIA_API_KEY",
+                SecretStr("token"),
+            ),
             patch("app.services.imports.settings.NVIDIA_NIM_URL", "https://nim"),
             patch("app.services.imports.urlopen", return_value=response),
         ):
@@ -82,7 +86,10 @@ class ImportTests(unittest.TestCase):
         body = {"choices": [{"message": {"content": json.dumps({"records": {}})}}]}
         response = FakeResponse(body)
         with (
-            patch("app.services.imports.settings.NVIDIA_API_KEY", "token"),
+            patch(
+                "app.services.imports.settings.NVIDIA_API_KEY",
+                SecretStr("token"),
+            ),
             patch("app.services.imports.settings.NVIDIA_NIM_URL", "https://nim"),
             patch("app.services.imports.urlopen", return_value=response),
             self.assertRaisesRegex(RuntimeError, "resposta inválida"),

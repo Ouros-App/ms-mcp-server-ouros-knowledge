@@ -1,7 +1,7 @@
 import json
 from datetime import date, datetime, time
 from decimal import Decimal
-from typing import Any, Literal
+from typing import Any
 from uuid import UUID
 
 import psycopg
@@ -9,18 +9,29 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from app.core.config import settings
+from app.core.identity import (
+    COMPANY_EMPLOYEE_USER_TYPE,
+    FARM_OWNER_USER_TYPE,
+    USER_TYPE_ERROR,
+    VALID_USER_TYPES,
+    UserType,
+)
 
-UserType = Literal["farm_owner", "company_employee", "admin"]
-VALID_USER_TYPES = {"farm_owner", "company_employee", "admin"}
+DEFAULT_FARM_DATA_LIMIT = 20
+MAX_FARM_DATA_LIMIT = 100
+DEFAULT_CONSUMPTION_PERIOD_DAYS = 30
+MAX_CONSUMPTION_PERIOD_DAYS = 366
+MAX_IMPORT_RECORDS = 1_000
+MAX_IMPORT_PAYLOAD_BYTES = 1024 * 1024
 USER_NOT_FOUND = "usuário não encontrado"
 
 
 def _connect() -> psycopg.Connection:
     """Open a PostgreSQL connection using the configured read-only URL."""
-    if not settings.MIDAS_DATABASE_URL:
-        raise RuntimeError("MIDAS_DATABASE_URL não está configurada no .env")
+    if settings.MIDAS_DATABASE_URL is None:
+        raise RuntimeError("MIDAS_DATABASE_URL não está configurada no ambiente")
     return psycopg.connect(
-        settings.MIDAS_DATABASE_URL,
+        settings.MIDAS_DATABASE_URL.get_secret_value(),
         connect_timeout=settings.MIDAS_DB_CONNECT_TIMEOUT,
         row_factory=dict_row,
     )
@@ -28,10 +39,12 @@ def _connect() -> psycopg.Connection:
 
 def _connect_import() -> psycopg.Connection:
     """Open the restricted database connection used only for imports."""
-    if not settings.MIDAS_IMPORT_DATABASE_URL:
-        raise RuntimeError("MIDAS_IMPORT_DATABASE_URL não está configurada no .env")
+    if settings.MIDAS_IMPORT_DATABASE_URL is None:
+        raise RuntimeError(
+            "MIDAS_IMPORT_DATABASE_URL não está configurada no ambiente"
+        )
     return psycopg.connect(
-        settings.MIDAS_IMPORT_DATABASE_URL,
+        settings.MIDAS_IMPORT_DATABASE_URL.get_secret_value(),
         connect_timeout=settings.MIDAS_DB_CONNECT_TIMEOUT,
         row_factory=dict_row,
     )
@@ -58,15 +71,30 @@ def _rows(cursor: Any) -> list[dict[str, Any]]:
 def _validate_user(user_type: str, user_id: int) -> None:
     """Validate the supported user identity shape."""
     if user_type not in VALID_USER_TYPES:
-        raise ValueError("user_type deve ser farm_owner, company_employee ou admin")
+        raise ValueError(USER_TYPE_ERROR)
     if user_id <= 0:
         raise ValueError("user_id deve ser maior que zero")
 
 
 def _validate_limit(limit: int) -> None:
     """Validate the maximum number of records returned per collection."""
-    if not 1 <= limit <= 100:
-        raise ValueError("limit deve estar entre 1 e 100")
+    if not 1 <= limit <= MAX_FARM_DATA_LIMIT:
+        raise ValueError(
+            f"limit deve estar entre 1 e {MAX_FARM_DATA_LIMIT}"
+        )
+
+
+def _validate_period_days(period_days: int) -> None:
+    """Bound aggregate queries to an integer read-only time window."""
+    if (
+        isinstance(period_days, bool)
+        or not isinstance(period_days, int)
+        or not 1 <= period_days <= MAX_CONSUMPTION_PERIOD_DAYS
+    ):
+        raise ValueError(
+            "period_days deve ser um inteiro entre 1 e "
+            f"{MAX_CONSUMPTION_PERIOD_DAYS}"
+        )
 
 
 def import_resource_records(
@@ -85,13 +113,19 @@ def import_resource_records(
         raise ValueError("request_id deve ser um UUID válido") from error
     if not source_type.strip() or not source_name.strip():
         raise ValueError("source_type e source_name não podem ser vazios")
-    if not isinstance(records, list) or len(records) > 1000:
-        raise ValueError("records deve ser uma lista com no máximo 1000 itens")
+    if not isinstance(records, list) or len(records) > MAX_IMPORT_RECORDS:
+        raise ValueError(
+            "records deve ser uma lista com no máximo "
+            f"{MAX_IMPORT_RECORDS} itens"
+        )
     if any(not isinstance(record, dict) for record in records):
         raise ValueError("cada registro deve ser um objeto JSON")
     serialized_payload = json.dumps(records)
-    if len(serialized_payload.encode("utf-8")) > 1024 * 1024:
-        raise ValueError("payload de importação excede 1 MiB")
+    if len(serialized_payload.encode("utf-8")) > MAX_IMPORT_PAYLOAD_BYTES:
+        raise ValueError(
+            "payload de importação excede "
+            f"{MAX_IMPORT_PAYLOAD_BYTES // (1024 * 1024)} MiB"
+        )
     payload = Jsonb(records, dumps=lambda _value: serialized_payload)
 
     with _connect_import() as connection:
@@ -115,15 +149,12 @@ def _resolve_user_scope(
     user_id: int,
 ) -> tuple[dict[str, Any], list[int], list[int]]:
     """Resolve a user and the farms and enterprises they may access."""
-    if user_type == "farm_owner":
+    if user_type == FARM_OWNER_USER_TYPE:
         row = cursor.execute(
             """
             SELECT
                 fo.id AS user_id,
                 fo.name,
-                fo.email,
-                fo.document_number,
-                fo.telephone,
                 fo.id_farm AS farm_id,
                 f.id_enterprise AS enterprise_id
             FROM midas.farm_owners AS fo
@@ -136,15 +167,12 @@ def _resolve_user_scope(
             raise ValueError(USER_NOT_FOUND)
         return dict(row), [row["farm_id"]], [row["enterprise_id"]]
 
-    if user_type == "company_employee":
+    if user_type == COMPANY_EMPLOYEE_USER_TYPE:
         row = cursor.execute(
             """
             SELECT
                 ce.id AS user_id,
                 ce.name,
-                ce.document_number,
-                ce.email,
-                ce.telephone,
                 ce.id_enterprise AS enterprise_id
             FROM midas.company_employees AS ce
             WHERE ce.id = %s
@@ -160,7 +188,7 @@ def _resolve_user_scope(
         return dict(row), [farm["id"] for farm in farms], [row["enterprise_id"]]
 
     row = cursor.execute(
-        "SELECT id AS user_id, email FROM midas.adms WHERE id = %s",
+        "SELECT id AS user_id FROM midas.adms WHERE id = %s",
         (user_id,),
     ).fetchone()
     if not row:
@@ -197,10 +225,10 @@ def get_user_context(user_type: UserType, user_id: int) -> dict[str, Any]:
             enterprises = _rows(
                 cursor.execute(
                     """
-                        SELECT id, name, email, document_number, telephone, id_address
+                        SELECT name
                         FROM midas.enterprises
                         WHERE id = ANY(%s)
-                        ORDER BY id
+                        ORDER BY name
                         """,
                     (enterprise_ids,),
                 )
@@ -211,33 +239,39 @@ def get_user_context(user_type: UserType, user_id: int) -> dict[str, Any]:
                 cursor.execute(
                     """
                         SELECT
-                            id,
-                            name,
-                            area_property,
-                            region,
-                            poultry_capacity,
-                            place,
-                            id_address,
-                            id_enterprise
-                        FROM midas.farms
-                        WHERE id = ANY(%s)
-                        ORDER BY id
+                            f.name,
+                            f.area_property,
+                            f.region,
+                            f.poultry_capacity,
+                            f.place,
+                            a.state,
+                            a.city
+                        FROM midas.farms AS f
+                        LEFT JOIN midas.addresses AS a ON a.id = f.id_address
+                        WHERE f.id = ANY(%s)
+                        ORDER BY f.id
                         """,
                     (farm_ids,),
                 )
             )
 
+    public_profile = {
+        key: _json_safe(profile[key])
+        for key in ("name",)
+        if profile.get(key) is not None
+    }
     return {
         "user_type": user_type,
-        "user_id": user_id,
-        "profile": _json_safe(profile),
+        "profile": public_profile,
         "enterprises": enterprises,
         "farms": farms,
     }
 
 
 def get_user_farm_data(
-    user_type: UserType, user_id: int, limit: int = 20
+    user_type: UserType,
+    user_id: int,
+    limit: int = DEFAULT_FARM_DATA_LIMIT,
 ) -> dict[str, Any]:
     """Return bounded farm records scoped to the user's linked farms."""
     _validate_user(user_type, user_id)
@@ -257,11 +291,13 @@ def get_user_farm_data(
             "farms": _rows(
                 cursor.execute(
                     """
-                        SELECT id, name, area_property, region,
-                               poultry_capacity, place, id_address, id_enterprise
-                        FROM midas.farms
-                        WHERE id = ANY(%s)
-                        ORDER BY id
+                        SELECT f.id, f.name, f.area_property, f.region,
+                               f.poultry_capacity, f.place, f.id_address,
+                               f.id_enterprise, a.state, a.city
+                        FROM midas.farms AS f
+                        LEFT JOIN midas.addresses AS a ON a.id = f.id_address
+                        WHERE f.id = ANY(%s)
+                        ORDER BY f.id
                         LIMIT %s
                         """,
                     (farm_ids, limit),
@@ -350,4 +386,92 @@ def get_user_farm_data(
         "user_id": user_id,
         "farm_ids": farm_ids,
         "data": data,
+    }
+
+
+def get_consumption_summary(
+    user_type: UserType,
+    user_id: int,
+    period_days: int = DEFAULT_CONSUMPTION_PERIOD_DAYS,
+) -> dict[str, Any]:
+    """Return scoped aggregate water/energy data without exposing arbitrary SQL."""
+    _validate_user(user_type, user_id)
+    _validate_period_days(period_days)
+
+    with _connect() as connection, connection.cursor() as cursor:
+        _, farm_ids, _ = _resolve_user_scope(cursor, user_type, user_id)
+        if not farm_ids:
+            return {
+                "user_type": user_type,
+                "user_id": user_id,
+                "farm_ids": [],
+                "period_days": period_days,
+                "water_unit": "hydrometer_reading_delta",
+                "energy_unit": "kWh",
+                "summaries": [],
+            }
+
+        summaries = _rows(
+            cursor.execute(
+                """
+                WITH water AS (
+                    SELECT
+                        id_farm,
+                        COUNT(*) AS water_records,
+                        MIN(registration_date) AS first_water_record,
+                        MAX(registration_date) AS last_water_record,
+                        SUM(end_hydrometer - start_hydrometer) AS water_meter_delta
+                    FROM midas.water_registries
+                    WHERE registration_date >= CURRENT_DATE - (%s - 1)
+                      AND registration_date <= CURRENT_DATE
+                      AND id_farm = ANY(%s)
+                    GROUP BY id_farm
+                ),
+                energy AS (
+                    SELECT
+                        id_farm,
+                        COUNT(*) AS energy_records,
+                        MIN(registration_date) AS first_energy_record,
+                        MAX(registration_date) AS last_energy_record,
+                        SUM(energy_consumption) AS energy_consumption_kwh
+                    FROM midas.energy_registries
+                    WHERE registration_date >= CURRENT_DATE - (%s - 1)
+                      AND registration_date <= CURRENT_DATE
+                      AND id_farm = ANY(%s)
+                    GROUP BY id_farm
+                )
+                SELECT
+                    f.id AS id_farm,
+                    f.name AS farm_name,
+                    f.region,
+                    f.place,
+                    a.state,
+                    a.city,
+                    COALESCE(w.water_records, 0) AS water_records,
+                    w.first_water_record,
+                    w.last_water_record,
+                    COALESCE(w.water_meter_delta, 0) AS water_meter_delta,
+                    COALESCE(e.energy_records, 0) AS energy_records,
+                    e.first_energy_record,
+                    e.last_energy_record,
+                    COALESCE(e.energy_consumption_kwh, 0) AS energy_consumption_kwh
+                FROM midas.farms AS f
+                LEFT JOIN midas.addresses AS a ON a.id = f.id_address
+                LEFT JOIN water AS w ON w.id_farm = f.id
+                LEFT JOIN energy AS e ON e.id_farm = f.id
+                WHERE f.id = ANY(%s)
+                ORDER BY f.id
+                """,
+                (period_days, farm_ids, period_days, farm_ids, farm_ids),
+            )
+        )
+
+    return {
+        "user_type": user_type,
+        "user_id": user_id,
+        "farm_ids": farm_ids,
+        "period_days": period_days,
+        "water_unit": "hydrometer_reading_delta",
+        "energy_unit": "kWh",
+        "summaries": summaries,
     }
