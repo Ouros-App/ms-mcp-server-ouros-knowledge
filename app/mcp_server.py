@@ -108,7 +108,8 @@ def get_user_context() -> dict[str, Any]:
     logger.info("mcp_tool_started tool=get_user_context user_type=%s", user_type)
     result = get_database_user_context(user_type, user_id)
     logger.info(
-        "mcp_tool_completed tool=get_user_context user_type=%s farms=%d enterprises=%d duration_ms=%.1f",
+        "mcp_tool_completed tool=get_user_context user_type=%s "
+        "farms=%d enterprises=%d duration_ms=%.1f",
         user_type,
         len(result.get("farms", [])),
         len(result.get("enterprises", [])),
@@ -142,7 +143,8 @@ def get_consumption_summary(
     )
     result = get_database_consumption_summary(user_type, user_id, period_days)
     logger.info(
-        "mcp_tool_completed tool=get_consumption_summary user_type=%s period_days=%d summaries=%d duration_ms=%.1f",
+        "mcp_tool_completed tool=get_consumption_summary user_type=%s "
+        "period_days=%d summaries=%d duration_ms=%.1f",
         user_type,
         period_days,
         len(result.get("summaries", [])),
