@@ -90,7 +90,8 @@ class AuthTests(unittest.IsolatedAsyncioTestCase):
 
         joined = "\n".join(logs.output)
         self.assertIn("reason=authorized_party_mismatch", joined)
-        self.assertIn("actual=ouros-mobile", joined)
+        self.assertIn("azp_present=True", joined)
+        self.assertNotIn("ouros-mobile", joined)
         self.assertNotIn("direct-mobile-token", joined)
 
     def test_identity_claim_validation(self) -> None:
@@ -189,6 +190,52 @@ class AuthTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("reason=invalid_business_identity", joined)
         self.assertNotIn("sensitive-jwt", joined)
         self.assertNotIn("database_id=42", joined)
+
+    async def test_invalid_account_type_value_is_redacted_from_verifier_logs(self) -> None:
+        sensitive_value = "private@example.com"
+        claims = {
+            "sub": "subject",
+            "azp": "ms-ai-server-mcp-exchange",
+            "database_id": 42,
+            "account_type": sensitive_value,
+            "realm_access": {"roles": [sensitive_value]},
+        }
+        with (
+            patch("app.services.auth._decode_keycloak_token", return_value=claims),
+            self.assertLogs("app.services.auth", level="WARNING") as logs,
+        ):
+            result = await KeycloakTokenVerifier().verify_token("sensitive-jwt")
+
+        self.assertIsNone(result)
+        joined = "\n".join(logs.output)
+        self.assertIn("account_type_present=True", joined)
+        self.assertIn("account_type_known=False", joined)
+        self.assertNotIn(sensitive_value, joined)
+
+    @patch("app.services.auth.get_access_token")
+    def test_invalid_account_type_value_is_redacted_from_identity_logs(
+        self,
+        get_access_token,
+    ) -> None:
+        sensitive_value = "private@example.com"
+        get_access_token.return_value = SimpleNamespace(
+            claims={
+                "database_id": 42,
+                "account_type": sensitive_value,
+                "realm_access": {"roles": [sensitive_value]},
+            }
+        )
+
+        with (
+            self.assertLogs("app.services.auth", level="WARNING") as logs,
+            self.assertRaises(PermissionError),
+        ):
+            get_authenticated_identity()
+
+        joined = "\n".join(logs.output)
+        self.assertIn("account_type_present=True", joined)
+        self.assertIn("account_type_known=False", joined)
+        self.assertNotIn(sensitive_value, joined)
 
 
 if __name__ == "__main__":
