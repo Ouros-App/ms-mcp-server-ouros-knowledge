@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from functools import lru_cache
 
 from jwt import InvalidTokenError, PyJWKClient, decode
@@ -12,6 +13,8 @@ from mcp.server.auth.provider import AccessToken
 
 from app.core.config import settings
 from app.core.identity import VALID_USER_TYPES
+
+logger = logging.getLogger(__name__)
 
 
 class AuthenticationKeyServiceError(RuntimeError):
@@ -36,11 +39,23 @@ def _get_signing_key(token: str):
     try:
         client.get_jwk_set()
         return client.get_signing_key_from_jwt(token)
-    except PyJWKClientConnectionError:
+    except PyJWKClientConnectionError as exc:
+        logger.warning(
+            "mcp_auth_key_lookup_failed reason=jwks_unavailable error=%s",
+            type(exc).__name__,
+        )
         raise
     except PyJWKSetError as exc:
+        logger.warning(
+            "mcp_auth_key_lookup_failed reason=invalid_jwks error=%s",
+            type(exc).__name__,
+        )
         raise AuthenticationKeyServiceError("invalid JWKS key set") from exc
-    except (InvalidTokenError, PyJWKClientError, ValueError, TypeError):
+    except (InvalidTokenError, PyJWKClientError, ValueError, TypeError) as exc:
+        logger.warning(
+            "mcp_auth_rejected reason=signing_key_unavailable error=%s",
+            type(exc).__name__,
+        )
         return None
 
 
@@ -58,11 +73,21 @@ def _decode_keycloak_token(token: str) -> dict | None:
             audience=settings.MCP_JWT_AUDIENCE,
             options={"require": ["exp", "iat", "iss", "aud", "sub"]},
         )
-    except InvalidTokenError:
+    except InvalidTokenError as exc:
+        logger.warning(
+            "mcp_auth_rejected reason=jwt_validation_failed error=%s",
+            type(exc).__name__,
+        )
         return None
     if not isinstance(claims, dict):
+        logger.warning("mcp_auth_rejected reason=claims_not_object")
         return None
     if claims.get("azp") != settings.MCP_JWT_AUTHORIZED_PARTY:
+        logger.warning(
+            "mcp_auth_rejected reason=authorized_party_mismatch actual=%s expected=%s",
+            claims.get("azp") or "missing",
+            settings.MCP_JWT_AUTHORIZED_PARTY,
+        )
         return None
     return claims
 
@@ -107,9 +132,25 @@ class KeycloakTokenVerifier:
         self.resource_url = resource_url or settings.MCP_RESOURCE_URL
 
     async def verify_token(self, token: str) -> AccessToken | None:
+        logger.info("mcp_auth_started")
         claims = await asyncio.to_thread(_decode_keycloak_token, token)
-        if claims is None or _identity_from_claims(claims) is None:
+        if claims is None:
             return None
+
+        identity = _identity_from_claims(claims)
+        if identity is None:
+            logger.warning(
+                "mcp_auth_rejected reason=invalid_business_identity account_type=%s has_database_id=%s",
+                claims.get("account_type") or "missing",
+                "database_id" in claims,
+            )
+            return None
+
+        logger.info(
+            "mcp_auth_accepted client_id=%s user_type=%s",
+            claims.get("azp") or "unknown",
+            identity[0],
+        )
 
         scope = claims.get("scope", "")
         scopes = scope.split() if isinstance(scope, str) and scope.strip() else ["mcp"]
@@ -130,10 +171,15 @@ def get_authenticated_identity() -> tuple[str, int]:
 
     access_token = get_access_token()
     if access_token is None:
+        logger.warning("mcp_identity_unavailable reason=missing_access_token")
         raise PermissionError("autenticação MCP obrigatória")
 
     claims = access_token.claims if isinstance(access_token.claims, dict) else {}
     identity = _identity_from_claims(claims)
     if identity is None:
+        logger.warning(
+            "mcp_identity_unavailable reason=invalid_business_identity account_type=%s",
+            claims.get("account_type") or "missing",
+        )
         raise PermissionError("identidade MCP inválida")
     return identity
