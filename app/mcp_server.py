@@ -12,18 +12,13 @@ from app.services.auth import (
 )
 from app.services.database import (
     DEFAULT_CONSUMPTION_PERIOD_DAYS,
-    DEFAULT_FARM_DATA_LIMIT,
     MAX_CONSUMPTION_PERIOD_DAYS,
-    MAX_FARM_DATA_LIMIT,
 )
 from app.services.database import (
     get_consumption_summary as get_database_consumption_summary,
 )
 from app.services.database import (
     get_user_context as get_database_user_context,
-)
-from app.services.database import (
-    get_user_farm_data as get_database_user_farm_data,
 )
 from app.services.database import (
     import_resource_records as get_database_import_resource_records,
@@ -93,22 +88,6 @@ def get_user_context() -> dict[str, Any]:
     """Load profile and linked farms for the authenticated Keycloak identity."""
     user_type, user_id = get_authenticated_identity()
     return get_database_user_context(user_type, user_id)
-
-
-@mcp.tool()
-def get_user_farm_data(
-    limit: Annotated[
-        int,
-        Field(
-            ge=1,
-            le=MAX_FARM_DATA_LIMIT,
-            description="Quantidade maxima por conjunto de dados.",
-        ),
-    ] = DEFAULT_FARM_DATA_LIMIT,
-) -> dict[str, Any]:
-    """Load bounded farm data for the authenticated Keycloak identity."""
-    user_type, user_id = get_authenticated_identity()
-    return get_database_user_farm_data(user_type, user_id, limit)
 
 
 @mcp.tool()
