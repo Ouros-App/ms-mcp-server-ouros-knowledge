@@ -140,7 +140,8 @@ class KeycloakTokenVerifier:
         identity = _identity_from_claims(claims)
         if identity is None:
             logger.warning(
-                "mcp_auth_rejected reason=invalid_business_identity account_type=%s has_database_id=%s",
+                "mcp_auth_rejected reason=invalid_business_identity "
+                "account_type=%s has_database_id=%s",
                 claims.get("account_type") or "missing",
                 "database_id" in claims,
             )
