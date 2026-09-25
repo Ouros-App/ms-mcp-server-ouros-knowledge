@@ -84,8 +84,14 @@ class AuthTests(unittest.IsolatedAsyncioTestCase):
                     "aud": ["mcp-audience"],
                 },
             ),
+            self.assertLogs("app.services.auth", level="WARNING") as logs,
         ):
             self.assertIsNone(_decode_keycloak_token("direct-mobile-token"))
+
+        joined = "\n".join(logs.output)
+        self.assertIn("reason=authorized_party_mismatch", joined)
+        self.assertIn("actual=ouros-mobile", joined)
+        self.assertNotIn("direct-mobile-token", joined)
 
     def test_identity_claim_validation(self) -> None:
         self.assertEqual(
@@ -163,6 +169,26 @@ class AuthTests(unittest.IsolatedAsyncioTestCase):
         get_access_token.return_value = SimpleNamespace(claims={})
         with self.assertRaises(PermissionError):
             get_authenticated_identity()
+
+    async def test_invalid_business_identity_logs_reason_without_token(self) -> None:
+        claims = {
+            "sub": "subject",
+            "azp": "ms-ai-server-mcp-exchange",
+            "database_id": 42,
+            "account_type": "farm_owner",
+            "realm_access": {"roles": []},
+        }
+        with (
+            patch("app.services.auth._decode_keycloak_token", return_value=claims),
+            self.assertLogs("app.services.auth", level="WARNING") as logs,
+        ):
+            result = await KeycloakTokenVerifier().verify_token("sensitive-jwt")
+
+        self.assertIsNone(result)
+        joined = "\n".join(logs.output)
+        self.assertIn("reason=invalid_business_identity", joined)
+        self.assertNotIn("sensitive-jwt", joined)
+        self.assertNotIn("database_id=42", joined)
 
 
 if __name__ == "__main__":
