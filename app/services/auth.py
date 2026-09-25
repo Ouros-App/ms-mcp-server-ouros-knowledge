@@ -23,10 +23,12 @@ class AuthenticationKeyServiceError(RuntimeError):
 
 @lru_cache(maxsize=8)
 def _get_jwks_client(jwks_url: str) -> PyJWKClient:
+    """Return a cached Keycloak JWKS client."""
     return PyJWKClient(jwks_url, cache_keys=True, lifespan=300)
 
 
 def _jwks_url() -> str:
+    """Resolve the explicit or issuer-derived JWKS endpoint."""
     return (
         settings.MCP_JWKS_URL
         or settings.MCP_JWT_ISSUER.rstrip("/")
@@ -35,6 +37,7 @@ def _jwks_url() -> str:
 
 
 def _get_signing_key(token: str):
+    """Resolve the signing key while classifying safe lookup failures."""
     client = _get_jwks_client(_jwks_url())
     try:
         client.get_jwk_set()
@@ -60,6 +63,7 @@ def _get_signing_key(token: str):
 
 
 def _decode_keycloak_token(token: str) -> dict | None:
+    """Validate a delegated JWT and enforce the authorized-party claim."""
     signing_key = _get_signing_key(token)
     if signing_key is None:
         return None
@@ -94,6 +98,7 @@ def _decode_keycloak_token(token: str) -> dict | None:
 
 
 def _identity_from_claims(claims: dict) -> tuple[str, int] | None:
+    """Extract a valid business identity from signed Keycloak claims."""
     database_id = claims.get("database_id")
     account_type = claims.get("account_type")
     realm_access = claims.get("realm_access")
@@ -130,9 +135,11 @@ class KeycloakTokenVerifier:
     """Validate the only supported MCP credential: a Keycloak access token."""
 
     def __init__(self, resource_url: str | None = None) -> None:
+        """Initialize verification for the configured MCP resource."""
         self.resource_url = resource_url or settings.MCP_RESOURCE_URL
 
     async def verify_token(self, token: str) -> AccessToken | None:
+        """Verify a delegated token and return MCP auth context when valid."""
         logger.info("mcp_auth_started")
         claims = await asyncio.to_thread(_decode_keycloak_token, token)
         if claims is None:
