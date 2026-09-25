@@ -1,3 +1,5 @@
+import logging
+from time import perf_counter
 from typing import Annotated, Any
 
 from mcp.server.auth.settings import AuthSettings
@@ -29,6 +31,8 @@ from app.services.database import (
 from app.services.imports import extract_resource_records, file_to_markdown
 from app.services.knowledge import qdrant_status as get_qdrant_status
 from app.services.knowledge import search_knowledge as search_qdrant
+
+logger = logging.getLogger(__name__)
 
 mcp = FastMCP(
     name=settings.PROJECT_NAME,
@@ -62,13 +66,26 @@ def search_knowledge(
         query: Natural-language question or search phrase.
         limit: Number of matches to return within the configured search ceiling.
     """
+    logger.info(
+        "mcp_tool_started tool=search_knowledge query_chars=%d limit=%d",
+        len(query),
+        limit,
+    )
     if not query.strip():
+        logger.warning("mcp_tool_failed tool=search_knowledge reason=empty_query")
         raise ValueError("query não pode ser vazio")
     if not 1 <= limit <= settings.SEARCH_MAX_K:
         raise ValueError(
             f"limit deve estar entre 1 e {settings.SEARCH_MAX_K}"
         )
-    return search_qdrant(query.strip(), limit)
+    started_at = perf_counter()
+    result = search_qdrant(query.strip(), limit)
+    logger.info(
+        "mcp_tool_completed tool=search_knowledge result_count=%d duration_ms=%.1f",
+        len(result),
+        (perf_counter() - started_at) * 1000,
+    )
+    return result
 
 
 @mcp.tool()
@@ -86,8 +103,19 @@ def postgres_status() -> dict[str, Any]:
 @mcp.tool()
 def get_user_context() -> dict[str, Any]:
     """Load profile and linked farms for the authenticated Keycloak identity."""
+    started_at = perf_counter()
     user_type, user_id = get_authenticated_identity()
-    return get_database_user_context(user_type, user_id)
+    logger.info("mcp_tool_started tool=get_user_context user_type=%s", user_type)
+    result = get_database_user_context(user_type, user_id)
+    logger.info(
+        "mcp_tool_completed tool=get_user_context user_type=%s "
+        "farms=%d enterprises=%d duration_ms=%.1f",
+        user_type,
+        len(result.get("farms", [])),
+        len(result.get("enterprises", [])),
+        (perf_counter() - started_at) * 1000,
+    )
+    return result
 
 
 @mcp.tool()
@@ -106,8 +134,23 @@ def get_consumption_summary(
     The tool never accepts user_id or farm_id. Scope is derived exclusively from
     the delegated Keycloak token and the PostgreSQL relationship model.
     """
+    started_at = perf_counter()
     user_type, user_id = get_authenticated_identity()
-    return get_database_consumption_summary(user_type, user_id, period_days)
+    logger.info(
+        "mcp_tool_started tool=get_consumption_summary user_type=%s period_days=%d",
+        user_type,
+        period_days,
+    )
+    result = get_database_consumption_summary(user_type, user_id, period_days)
+    logger.info(
+        "mcp_tool_completed tool=get_consumption_summary user_type=%s "
+        "period_days=%d summaries=%d duration_ms=%.1f",
+        user_type,
+        period_days,
+        len(result.get("summaries", [])),
+        (perf_counter() - started_at) * 1000,
+    )
+    return result
 
 
 @mcp.tool()

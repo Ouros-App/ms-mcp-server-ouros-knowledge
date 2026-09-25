@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -5,6 +6,8 @@ from fastapi import FastAPI
 from app.api.routes import router
 from app.core.config import settings
 from app.mcp_server import mcp
+
+logger = logging.getLogger(__name__)
 
 OPENAPI_TAGS = [
     {
@@ -17,7 +20,14 @@ OPENAPI_TAGS = [
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Run the MCP session manager for the FastAPI application lifetime."""
+    logger.info(
+        "mcp_application_starting issuer=%s audience=%s authorized_party=%s",
+        settings.MCP_JWT_ISSUER,
+        settings.MCP_JWT_AUDIENCE,
+        settings.MCP_JWT_AUTHORIZED_PARTY,
+    )
     async with mcp.session_manager.run():
+        logger.info("mcp_application_ready")
         yield
 
 

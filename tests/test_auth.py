@@ -14,6 +14,7 @@ from app.services.auth import (
 
 class AuthTests(unittest.IsolatedAsyncioTestCase):
     def test_jwks_url_supports_explicit_and_derived_modes(self) -> None:
+        """Resolve both explicit and issuer-derived JWKS URLs."""
         with (
             patch.object(settings, "MCP_JWKS_URL", "https://keys.example/jwks"),
             patch.object(settings, "MCP_JWT_ISSUER", "https://issuer.example"),
@@ -30,6 +31,7 @@ class AuthTests(unittest.IsolatedAsyncioTestCase):
             )
 
     def test_decode_keycloak_token_uses_rs256_issuer_and_audience(self) -> None:
+        """Enforce RS256 plus the configured issuer and audience."""
         signing_key = SimpleNamespace(key="public-key")
         jwks_client = Mock()
         jwks_client.get_jwk_set.return_value = object()
@@ -61,6 +63,7 @@ class AuthTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(decoder.call_args.kwargs["audience"], "mcp-audience")
 
     def test_direct_mobile_authorized_party_is_rejected(self) -> None:
+        """Reject direct mobile tokens without logging the raw azp value."""
         signing_key = SimpleNamespace(key="public-key")
         jwks_client = Mock()
         jwks_client.get_jwk_set.return_value = object()
@@ -84,10 +87,18 @@ class AuthTests(unittest.IsolatedAsyncioTestCase):
                     "aud": ["mcp-audience"],
                 },
             ),
+            self.assertLogs("app.services.auth", level="WARNING") as logs,
         ):
             self.assertIsNone(_decode_keycloak_token("direct-mobile-token"))
 
+        joined = "\n".join(logs.output)
+        self.assertIn("reason=authorized_party_mismatch", joined)
+        self.assertIn("azp_present=True", joined)
+        self.assertNotIn("ouros-mobile", joined)
+        self.assertNotIn("direct-mobile-token", joined)
+
     def test_identity_claim_validation(self) -> None:
+        """Accept only supported business identity claim combinations."""
         self.assertEqual(
             _identity_from_claims(
                 {
@@ -119,6 +130,7 @@ class AuthTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIsNone(_identity_from_claims(claims))
 
     async def test_keycloak_token_returns_signed_business_claims(self) -> None:
+        """Build MCP access context from valid signed business claims."""
         claims = {
             "sub": "keycloak-subject",
             "database_id": 42,
@@ -137,6 +149,7 @@ class AuthTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(access_token.scopes, ["openid", "ouros-identity"])
 
     async def test_invalid_keycloak_token_is_rejected_without_fallback(self) -> None:
+        """Reject invalid delegated tokens without a compatibility fallback."""
         with patch("app.services.auth._decode_keycloak_token", return_value=None):
             self.assertIsNone(
                 await KeycloakTokenVerifier().verify_token("not-a-keycloak-token")
@@ -144,6 +157,7 @@ class AuthTests(unittest.IsolatedAsyncioTestCase):
 
     @patch("app.services.auth.get_access_token")
     def test_identity_is_derived_only_from_keycloak_claims(self, get_access_token) -> None:
+        """Derive request identity only from signed Keycloak claims."""
         get_access_token.return_value = SimpleNamespace(
             claims={
                 "database_id": 42,
@@ -155,14 +169,85 @@ class AuthTests(unittest.IsolatedAsyncioTestCase):
 
     @patch("app.services.auth.get_access_token", return_value=None)
     def test_missing_token_requires_authentication(self, _get_access_token) -> None:
+        """Require an MCP access token before resolving identity."""
         with self.assertRaises(PermissionError):
             get_authenticated_identity()
 
     @patch("app.services.auth.get_access_token")
     def test_invalid_claim_identity_is_rejected(self, get_access_token) -> None:
+        """Reject incomplete business identity claims."""
         get_access_token.return_value = SimpleNamespace(claims={})
         with self.assertRaises(PermissionError):
             get_authenticated_identity()
+
+    async def test_invalid_business_identity_logs_reason_without_token(self) -> None:
+        """Log invalid identity reasons without exposing token material."""
+        claims = {
+            "sub": "subject",
+            "azp": "ms-ai-server-mcp-exchange",
+            "database_id": 42,
+            "account_type": "farm_owner",
+            "realm_access": {"roles": []},
+        }
+        with (
+            patch("app.services.auth._decode_keycloak_token", return_value=claims),
+            self.assertLogs("app.services.auth", level="WARNING") as logs,
+        ):
+            result = await KeycloakTokenVerifier().verify_token("sensitive-jwt")
+
+        self.assertIsNone(result)
+        joined = "\n".join(logs.output)
+        self.assertIn("reason=invalid_business_identity", joined)
+        self.assertNotIn("sensitive-jwt", joined)
+        self.assertNotIn("database_id=42", joined)
+
+    async def test_invalid_account_type_value_is_redacted_from_verifier_logs(self) -> None:
+        """Redact untrusted account-type values in verifier diagnostics."""
+        sensitive_value = "private@example.com"
+        claims = {
+            "sub": "subject",
+            "azp": "ms-ai-server-mcp-exchange",
+            "database_id": 42,
+            "account_type": sensitive_value,
+            "realm_access": {"roles": [sensitive_value]},
+        }
+        with (
+            patch("app.services.auth._decode_keycloak_token", return_value=claims),
+            self.assertLogs("app.services.auth", level="WARNING") as logs,
+        ):
+            result = await KeycloakTokenVerifier().verify_token("sensitive-jwt")
+
+        self.assertIsNone(result)
+        joined = "\n".join(logs.output)
+        self.assertIn("account_type_present=True", joined)
+        self.assertIn("account_type_known=False", joined)
+        self.assertNotIn(sensitive_value, joined)
+
+    @patch("app.services.auth.get_access_token")
+    def test_invalid_account_type_value_is_redacted_from_identity_logs(
+        self,
+        get_access_token,
+    ) -> None:
+        """Redact untrusted account-type values in identity diagnostics."""
+        sensitive_value = "private@example.com"
+        get_access_token.return_value = SimpleNamespace(
+            claims={
+                "database_id": 42,
+                "account_type": sensitive_value,
+                "realm_access": {"roles": [sensitive_value]},
+            }
+        )
+
+        with (
+            self.assertLogs("app.services.auth", level="WARNING") as logs,
+            self.assertRaises(PermissionError),
+        ):
+            get_authenticated_identity()
+
+        joined = "\n".join(logs.output)
+        self.assertIn("account_type_present=True", joined)
+        self.assertIn("account_type_known=False", joined)
+        self.assertNotIn(sensitive_value, joined)
 
 
 if __name__ == "__main__":
