@@ -84,8 +84,9 @@ def _decode_keycloak_token(token: str) -> dict | None:
         return None
     if claims.get("azp") != settings.MCP_JWT_AUTHORIZED_PARTY:
         logger.warning(
-            "mcp_auth_rejected reason=authorized_party_mismatch actual=%s expected=%s",
-            claims.get("azp") or "missing",
+            "mcp_auth_rejected reason=authorized_party_mismatch "
+            "azp_present=%s expected=%s",
+            claims.get("azp") is not None,
             settings.MCP_JWT_AUTHORIZED_PARTY,
         )
         return None
@@ -139,10 +140,13 @@ class KeycloakTokenVerifier:
 
         identity = _identity_from_claims(claims)
         if identity is None:
+            account_type = claims.get("account_type")
             logger.warning(
                 "mcp_auth_rejected reason=invalid_business_identity "
-                "account_type=%s has_database_id=%s",
-                claims.get("account_type") or "missing",
+                "account_type_present=%s account_type_known=%s "
+                "has_database_id=%s",
+                account_type is not None,
+                account_type in VALID_USER_TYPES,
                 "database_id" in claims,
             )
             return None
@@ -178,9 +182,12 @@ def get_authenticated_identity() -> tuple[str, int]:
     claims = access_token.claims if isinstance(access_token.claims, dict) else {}
     identity = _identity_from_claims(claims)
     if identity is None:
+        account_type = claims.get("account_type")
         logger.warning(
-            "mcp_identity_unavailable reason=invalid_business_identity account_type=%s",
-            claims.get("account_type") or "missing",
+            "mcp_identity_unavailable reason=invalid_business_identity "
+            "account_type_present=%s account_type_known=%s",
+            account_type is not None,
+            account_type in VALID_USER_TYPES,
         )
         raise PermissionError("identidade MCP inválida")
     return identity
