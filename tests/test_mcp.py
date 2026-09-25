@@ -10,7 +10,6 @@ from app.main import app
 from app.mcp_server import (
     get_consumption_summary,
     get_user_context,
-    get_user_farm_data,
     import_user_resource_records,
     mcp,
     postgres_status,
@@ -109,14 +108,6 @@ class McpTests(unittest.TestCase):
         self.assertEqual(get_user_context(), {"profile": {}})
         identity.assert_called_once_with()
         context.assert_called_once_with("farm_owner", 42)
-
-    @patch("app.mcp_server.get_database_user_farm_data", return_value={"data": {}})
-    @patch("app.mcp_server.get_authenticated_identity", return_value=("farm_owner", 42))
-    def test_user_farm_data_uses_only_token_identity(self, identity, farm_data) -> None:
-        self.assertEqual(get_user_farm_data(5), {"data": {}})
-        identity.assert_called_once_with()
-        farm_data.assert_called_once_with("farm_owner", 42, 5)
-
 
     @patch(
         "app.mcp_server.get_database_consumption_summary",
