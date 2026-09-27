@@ -1,4 +1,5 @@
 import logging
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -48,7 +49,7 @@ app = FastAPI(
 @app.middleware("http")
 async def prometheus_request_metrics(request: Request, call_next):
     """Record bounded HTTP request telemetry for REST and MCP transport."""
-    started = __import__("time").perf_counter()
+    started = time.perf_counter()
     route = metric_path(request.url.path)
     status_code = 500
     try:
@@ -56,7 +57,7 @@ async def prometheus_request_metrics(request: Request, call_next):
         status_code = response.status_code
         return response
     finally:
-        duration = __import__("time").perf_counter() - started
+        duration = time.perf_counter() - started
         HTTP_REQUESTS.labels(
             request.method,
             route,
