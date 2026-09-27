@@ -1,7 +1,8 @@
 import re
 import time
+from collections.abc import Callable
 from functools import wraps
-from typing import Callable, TypeVar, ParamSpec
+from typing import ParamSpec, TypeVar
 
 from prometheus_client import Counter, Gauge, Histogram, generate_latest
 
