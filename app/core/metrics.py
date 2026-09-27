@@ -1,4 +1,3 @@
-import re
 import time
 from collections.abc import Callable
 from functools import wraps
@@ -37,9 +36,13 @@ DEPENDENCY_READY = Gauge(
 
 
 def metric_path(path: str) -> str:
-    if path.startswith("/mcp"):
+    """Return bounded route labels for REST and Streamable HTTP traffic."""
+    normalized = path.rstrip("/") or "/"
+    if normalized.startswith("/mcp"):
         return "/mcp"
-    return re.sub(r"/+$", "", path) or "/"
+    if normalized in {"/", "/health", "/metrics", "/docs", "/openapi.json"}:
+        return normalized
+    return "{unknown}"
 
 
 def instrument_tool(name: str) -> Callable[[Callable[P, R]], Callable[P, R]]:
