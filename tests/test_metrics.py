@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 
 from app.core.metrics import DEPENDENCY_READY, instrument_tool
@@ -13,8 +15,7 @@ def test_tool_instrumentation_preserves_function_contract() -> None:
     assert add.__name__ == "add"
 
 
-@pytest.mark.asyncio
-async def test_metrics_token_accepts_prometheus_authorized_party(
+def test_metrics_token_accepts_prometheus_authorized_party(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
@@ -23,7 +24,7 @@ async def test_metrics_token_accepts_prometheus_authorized_party(
         lambda _token: {"azp": "ouros-prometheus"},
     )
 
-    claims = await auth.verify_metrics_token("signed-token")
+    claims = asyncio.run(auth.verify_metrics_token("signed-token"))
 
     assert claims == {"azp": "ouros-prometheus"}
 
