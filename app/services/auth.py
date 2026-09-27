@@ -97,6 +97,51 @@ def _decode_keycloak_token(token: str) -> dict | None:
     return claims
 
 
+def _decode_metrics_token(token: str) -> dict | None:
+    """Validate the dedicated Prometheus service-account access token."""
+    signing_key = _get_signing_key(token)
+    if signing_key is None:
+        return None
+
+    try:
+        claims = decode(
+            token,
+            signing_key.key,
+            algorithms=["RS256"],
+            issuer=settings.MCP_JWT_ISSUER,
+            audience=settings.MCP_JWT_AUDIENCE,
+            options={"require": ["exp", "iat", "iss", "aud", "sub"]},
+        )
+    except InvalidTokenError as exc:
+        logger.warning(
+            "mcp_metrics_auth_rejected reason=jwt_validation_failed error=%s",
+            type(exc).__name__,
+        )
+        return None
+
+    if not isinstance(claims, dict):
+        return None
+    if (
+        claims.get("azp")
+        != settings.MCP_METRICS_KEYCLOAK_AUTHORIZED_PARTY
+    ):
+        logger.warning(
+            "mcp_metrics_auth_rejected reason=authorized_party_mismatch"
+        )
+        return None
+    return claims
+
+
+async def verify_metrics_token(token: str) -> dict | None:
+    """Verify metrics JWT without requiring human business identity claims."""
+    try:
+        return await asyncio.to_thread(_decode_metrics_token, token)
+    except PyJWKClientConnectionError as exc:
+        raise AuthenticationKeyServiceError(
+            "metrics JWKS unavailable"
+        ) from exc
+
+
 def _identity_from_claims(claims: dict) -> tuple[str, int] | None:
     """Extract a valid business identity from signed Keycloak claims."""
     database_id = claims.get("database_id")
