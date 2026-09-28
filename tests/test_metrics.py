@@ -52,6 +52,7 @@ def test_metric_path_bounds_unknown_routes() -> None:
     assert metric_path("/mcp/sessions/anything") == "/mcp"
     assert metric_path("/health/") == "/health"
     assert metric_path("/random/untrusted/value") == "{unknown}"
+    assert metric_path("/mcp-admin") == "{unknown}"
 
 
 def test_decode_metrics_token_enforces_service_account() -> None:
@@ -95,12 +96,14 @@ def test_metrics_auth_dependency_covers_rejection_and_success() -> None:
         scheme="Bearer",
         credentials="signed-token",
     )
-    with patch(
-        "app.api.routes.verify_metrics_token",
-        AsyncMock(return_value=None),
+    with (
+        patch(
+            "app.api.routes.verify_metrics_token",
+            AsyncMock(return_value=None),
+        ),
+        pytest.raises(HTTPException) as rejected,
     ):
-        with pytest.raises(HTTPException) as rejected:
-            asyncio.run(require_metrics_bearer(credentials))
+        asyncio.run(require_metrics_bearer(credentials))
     assert rejected.value.status_code == 401
 
     with patch(
@@ -116,14 +119,16 @@ def test_metrics_auth_dependency_maps_jwks_failure_to_503() -> None:
         scheme="Bearer",
         credentials="signed-token",
     )
-    with patch(
-        "app.api.routes.verify_metrics_token",
-        AsyncMock(
-            side_effect=auth.AuthenticationKeyServiceError("jwks unavailable")
+    with (
+        patch(
+            "app.api.routes.verify_metrics_token",
+            AsyncMock(
+                side_effect=auth.AuthenticationKeyServiceError("jwks unavailable")
+            ),
         ),
+        pytest.raises(HTTPException) as unavailable,
     ):
-        with pytest.raises(HTTPException) as unavailable:
-            asyncio.run(require_metrics_bearer(credentials))
+        asyncio.run(require_metrics_bearer(credentials))
 
     assert unavailable.value.status_code == 503
 
