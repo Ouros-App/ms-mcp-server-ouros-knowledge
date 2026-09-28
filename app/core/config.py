@@ -70,7 +70,8 @@ class Settings(BaseSettings):
             or not self.MCP_METRICS_KEYCLOAK_AUTHORIZED_PARTY
         ):
             raise ValueError(
-                "MCP_JWT_ISSUER, MCP_JWT_AUDIENCE e MCP_JWT_AUTHORIZED_PARTY são obrigatórios"
+                "MCP_JWT_ISSUER, MCP_JWT_AUDIENCE, MCP_JWT_AUTHORIZED_PARTY e "
+                "MCP_METRICS_KEYCLOAK_AUTHORIZED_PARTY são obrigatórios"
             )
         return self
 
