@@ -38,7 +38,7 @@ DEPENDENCY_READY = Gauge(
 def metric_path(path: str) -> str:
     """Return bounded route labels for REST and Streamable HTTP traffic."""
     normalized = path.rstrip("/") or "/"
-    if normalized.startswith("/mcp"):
+    if normalized == "/mcp" or normalized.startswith("/mcp/"):
         return "/mcp"
     if normalized in {"/", "/health", "/metrics", "/docs", "/openapi.json"}:
         return normalized
