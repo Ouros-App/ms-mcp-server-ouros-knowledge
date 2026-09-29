@@ -1,10 +1,12 @@
 import logging
+import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 
 from app.api.routes import router
 from app.core.config import settings
+from app.core.metrics import HTTP_DURATION, HTTP_REQUESTS, metric_path
 from app.mcp_server import mcp
 
 logger = logging.getLogger(__name__)
@@ -43,6 +45,26 @@ app = FastAPI(
     openapi_tags=OPENAPI_TAGS,
     lifespan=lifespan,
 )
+
+@app.middleware("http")
+async def prometheus_request_metrics(request: Request, call_next):
+    """Record bounded HTTP request telemetry for REST and MCP transport."""
+    started = time.perf_counter()
+    route = metric_path(request.url.path)
+    status_code = 500
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+        return response
+    finally:
+        duration = time.perf_counter() - started
+        HTTP_REQUESTS.labels(
+            request.method,
+            route,
+            str(status_code),
+        ).inc()
+        HTTP_DURATION.labels(request.method, route).observe(duration)
+
 
 app.include_router(router)
 app.mount("/mcp", mcp.streamable_http_app())

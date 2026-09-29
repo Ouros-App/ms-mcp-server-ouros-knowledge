@@ -8,6 +8,7 @@ from pydantic import Field
 
 from app.core.config import settings
 from app.core.identity import FARM_OWNER_USER_TYPE
+from app.core.metrics import DEPENDENCY_READY, instrument_tool
 from app.services.auth import (
     KeycloakTokenVerifier,
     get_authenticated_identity,
@@ -49,6 +50,7 @@ mcp = FastMCP(
 
 
 @mcp.tool()
+@instrument_tool("search_knowledge")
 def search_knowledge(
     query: str,
     limit: Annotated[
@@ -89,18 +91,29 @@ def search_knowledge(
 
 
 @mcp.tool()
+@instrument_tool("qdrant_status")
 def qdrant_status() -> dict[str, Any]:
     """Check whether the configured Qdrant collection is reachable."""
-    return get_qdrant_status()
+    result = get_qdrant_status()
+    DEPENDENCY_READY.labels("qdrant").set(
+        1 if result.get("connected") else 0
+    )
+    return result
 
 
 @mcp.tool()
+@instrument_tool("postgres_status")
 def postgres_status() -> dict[str, Any]:
     """Check whether the MIDAS read-only PostgreSQL connection is reachable."""
-    return get_postgres_status()
+    result = get_postgres_status()
+    DEPENDENCY_READY.labels("postgresql").set(
+        1 if result.get("connected") else 0
+    )
+    return result
 
 
 @mcp.tool()
+@instrument_tool("get_user_context")
 def get_user_context() -> dict[str, Any]:
     """Load profile and linked farms for the authenticated Keycloak identity."""
     started_at = perf_counter()
@@ -119,6 +132,7 @@ def get_user_context() -> dict[str, Any]:
 
 
 @mcp.tool()
+@instrument_tool("get_consumption_summary")
 def get_consumption_summary(
     period_days: Annotated[
         int,
@@ -154,6 +168,7 @@ def get_consumption_summary(
 
 
 @mcp.tool()
+@instrument_tool("import_user_resource_records")
 def import_user_resource_records(
     request_id: str,
     source_type: str,
@@ -177,6 +192,7 @@ def import_user_resource_records(
 
 
 @mcp.tool()
+@instrument_tool("prepare_resource_import")
 def prepare_resource_import(
     filename: str,
     content_type: str,

@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     MCP_JWT_ISSUER: str = "https://ouros-keycloak.discloud.app/realms/ouros"
     MCP_JWT_AUDIENCE: str = "ms-mcp-server-ouros-knowledge"
     MCP_JWT_AUTHORIZED_PARTY: str = "ms-ai-server-mcp-exchange"
+    MCP_METRICS_KEYCLOAK_AUTHORIZED_PARTY: str = "ouros-prometheus"
     MCP_JWKS_URL: str | None = None
 
     @field_validator(
@@ -60,14 +61,17 @@ class Settings(BaseSettings):
         self.MCP_JWT_ISSUER = self.MCP_JWT_ISSUER.strip()
         self.MCP_JWT_AUDIENCE = self.MCP_JWT_AUDIENCE.strip()
         self.MCP_JWT_AUTHORIZED_PARTY = self.MCP_JWT_AUTHORIZED_PARTY.strip()
+        self.MCP_METRICS_KEYCLOAK_AUTHORIZED_PARTY = self.MCP_METRICS_KEYCLOAK_AUTHORIZED_PARTY.strip()
 
         if (
             not self.MCP_JWT_ISSUER
             or not self.MCP_JWT_AUDIENCE
             or not self.MCP_JWT_AUTHORIZED_PARTY
+            or not self.MCP_METRICS_KEYCLOAK_AUTHORIZED_PARTY
         ):
             raise ValueError(
-                "MCP_JWT_ISSUER, MCP_JWT_AUDIENCE e MCP_JWT_AUTHORIZED_PARTY são obrigatórios"
+                "MCP_JWT_ISSUER, MCP_JWT_AUDIENCE, MCP_JWT_AUTHORIZED_PARTY e "
+                "MCP_METRICS_KEYCLOAK_AUTHORIZED_PARTY são obrigatórios"
             )
         return self
 
