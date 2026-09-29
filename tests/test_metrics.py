@@ -146,7 +146,8 @@ def test_metrics_endpoint_returns_prometheus_payload() -> None:
 def test_metrics_endpoint_rejects_anonymous_and_ordinary_mcp_token() -> None:
     signing_key = SimpleNamespace(key="public-key")
 
-    with TestClient(app) as client:
+    client = TestClient(app)
+    try:
         anonymous = client.get("/metrics")
         assert anonymous.status_code == 401
 
@@ -164,5 +165,7 @@ def test_metrics_endpoint_rejects_anonymous_and_ordinary_mcp_token() -> None:
                 "/metrics",
                 headers={"Authorization": "Bearer signed-token"},
             )
+    finally:
+        client.close()
 
     assert ordinary.status_code == 401
