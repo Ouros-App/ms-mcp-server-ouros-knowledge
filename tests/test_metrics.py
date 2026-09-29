@@ -5,10 +5,12 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
+from fastapi.testclient import TestClient
 from jwt import InvalidTokenError
 
 from app.api.routes import metrics, require_metrics_bearer
 from app.core.metrics import DEPENDENCY_READY, instrument_tool, metric_path
+from app.main import app
 from app.services import auth
 
 
@@ -138,3 +140,29 @@ def test_metrics_endpoint_returns_prometheus_payload() -> None:
 
     assert response.status_code == 200
     assert b"mcp_server_http_requests_total" in response.body
+
+
+
+def test_metrics_endpoint_rejects_anonymous_and_ordinary_mcp_token() -> None:
+    signing_key = SimpleNamespace(key="public-key")
+
+    with TestClient(app) as client:
+        anonymous = client.get("/metrics")
+        assert anonymous.status_code == 401
+
+        with (
+            patch(
+                "app.services.auth._get_signing_key",
+                return_value=signing_key,
+            ),
+            patch(
+                "app.services.auth.decode",
+                return_value={"azp": "ms-ai-server-mcp-exchange"},
+            ),
+        ):
+            ordinary = client.get(
+                "/metrics",
+                headers={"Authorization": "Bearer signed-token"},
+            )
+
+    assert ordinary.status_code == 401
