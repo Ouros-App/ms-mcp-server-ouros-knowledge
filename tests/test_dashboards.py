@@ -89,7 +89,7 @@ def test_decode_response_accepts_valid_dashboard():
     assert _decode_response(httpx.Response(200, json=VALID_PAYLOAD)) == VALID_PAYLOAD
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_create_custom_dashboard_posts_delegated_request():
     captured = {}
     real_client = httpx.AsyncClient
@@ -114,7 +114,7 @@ async def test_create_custom_dashboard_posts_delegated_request():
     assert b'"title":"Metas"' in captured["payload"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 @pytest.mark.parametrize(
     ("title", "charts", "period_days", "token", "base_url", "message"),
     [
@@ -139,7 +139,7 @@ async def test_create_custom_dashboard_rejects_invalid_request_before_http(
         await create_custom_dashboard(title, charts, period_days, token)
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 @pytest.mark.parametrize("failure", [httpx.ReadTimeout("slow"), httpx.ConnectError("offline")])
 async def test_create_custom_dashboard_maps_http_failures(failure):
     real_client = httpx.AsyncClient
@@ -155,7 +155,7 @@ async def test_create_custom_dashboard_maps_http_failures(failure):
         await create_custom_dashboard("Metas", [VALID_CHART], 30, "jwt")
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_create_custom_dashboard_rejects_mismatched_response():
     real_client = httpx.AsyncClient
     transport = httpx.MockTransport(

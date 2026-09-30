@@ -17,7 +17,7 @@ def context_with_token(token: str | None):
     )
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_custom_dashboard_tool_verifies_and_forwards_scoped_request():
     result = {"title": "Metas", "charts": [{"id": "goal-status"}]}
     charts = [SimpleNamespace(model_dump=lambda: {"chart_id": "goal-status", "render_as": "pie"})]
@@ -43,7 +43,7 @@ async def test_custom_dashboard_tool_verifies_and_forwards_scoped_request():
     )
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_custom_dashboard_tool_requires_a_delegated_bearer_token():
     with (
         patch("app.mcp_server.get_authenticated_identity", return_value=("farm_owner", 42)),
@@ -59,7 +59,7 @@ async def test_custom_dashboard_tool_requires_a_delegated_bearer_token():
     verify.assert_not_awaited()
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_custom_dashboard_tool_propagates_auth_and_api_errors():
     with (
         patch("app.mcp_server.get_authenticated_identity", return_value=("farm_owner", 42)),
