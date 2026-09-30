@@ -62,8 +62,8 @@ def _get_signing_key(token: str):
         return None
 
 
-def _decode_keycloak_token(token: str) -> dict | None:
-    """Validate a delegated JWT and enforce the authorized-party claim."""
+def _decode_token_for_audience(token: str, audience: str) -> dict | None:
+    """Validate a signed Keycloak access token for one resource audience."""
     signing_key = _get_signing_key(token)
     if signing_key is None:
         return None
@@ -74,7 +74,7 @@ def _decode_keycloak_token(token: str) -> dict | None:
             signing_key.key,
             algorithms=["RS256"],
             issuer=settings.MCP_JWT_ISSUER,
-            audience=settings.MCP_JWT_AUDIENCE,
+            audience=audience,
             options={"require": ["exp", "iat", "iss", "aud", "sub"]},
         )
     except InvalidTokenError as exc:
@@ -85,6 +85,14 @@ def _decode_keycloak_token(token: str) -> dict | None:
         return None
     if not isinstance(claims, dict):
         logger.warning("mcp_auth_rejected reason=claims_not_object")
+        return None
+    return claims
+
+
+def _decode_keycloak_token(token: str) -> dict | None:
+    """Validate a delegated MCP JWT and enforce the authorized-party claim."""
+    claims = _decode_token_for_audience(token, settings.MCP_JWT_AUDIENCE)
+    if claims is None:
         return None
     if claims.get("azp") != settings.MCP_JWT_AUTHORIZED_PARTY:
         logger.warning(
@@ -140,6 +148,37 @@ async def verify_metrics_token(token: str) -> dict | None:
         raise AuthenticationKeyServiceError(
             "metrics JWKS unavailable"
         ) from exc
+async def verify_telemetry_access_token(token: str) -> None:
+    """Require a Telemetry token for the same user as the current MCP request."""
+    mcp_access_token = get_access_token()
+    if mcp_access_token is None:
+        raise PermissionError("autenticação MCP obrigatória")
+
+    claims = await asyncio.to_thread(
+        _decode_token_for_audience,
+        token,
+        settings.TELEMETRY_JWT_AUDIENCE,
+    )
+    if (
+        claims is None
+        or claims.get("azp") != settings.MCP_JWT_AUTHORIZED_PARTY
+        or claims.get("sub") != mcp_access_token.subject
+    ):
+        logger.warning("mcp_telemetry_token_rejected reason=identity_mismatch")
+        raise PermissionError("token delegado do Telemetry inválido")
+
+    mcp_claims = (
+        mcp_access_token.claims
+        if isinstance(mcp_access_token.claims, dict)
+        else {}
+    )
+    scope_claims = ("database_id", "account_type", "farm_id", "enterprise_id")
+    if (
+        _identity_from_claims(claims) != _identity_from_claims(mcp_claims)
+        or any(claims.get(name) != mcp_claims.get(name) for name in scope_claims)
+    ):
+        logger.warning("mcp_telemetry_token_rejected reason=scope_mismatch")
+        raise PermissionError("token delegado do Telemetry inválido")
 
 
 def _identity_from_claims(claims: dict) -> tuple[str, int] | None:

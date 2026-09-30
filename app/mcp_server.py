@@ -3,8 +3,8 @@ from time import perf_counter
 from typing import Annotated, Any
 
 from mcp.server.auth.settings import AuthSettings
-from mcp.server.fastmcp import FastMCP
-from pydantic import Field
+from mcp.server.fastmcp import Context, FastMCP
+from pydantic import BaseModel, Field
 
 from app.core.config import settings
 from app.core.identity import FARM_OWNER_USER_TYPE
@@ -12,7 +12,10 @@ from app.core.metrics import DEPENDENCY_READY, instrument_tool
 from app.services.auth import (
     KeycloakTokenVerifier,
     get_authenticated_identity,
+    verify_telemetry_access_token,
 )
+from app.services.dashboards import DashboardServiceError
+from app.services.dashboards import create_custom_dashboard as render_custom_dashboard
 from app.services.database import (
     DEFAULT_CONSUMPTION_PERIOD_DAYS,
     MAX_CONSUMPTION_PERIOD_DAYS,
@@ -34,6 +37,22 @@ from app.services.knowledge import qdrant_status as get_qdrant_status
 from app.services.knowledge import search_knowledge as search_qdrant
 
 logger = logging.getLogger(__name__)
+
+
+class CustomDashboardChartSelection(BaseModel):
+    """One approved chart and its requested visual form."""
+
+    chart_id: str = Field(min_length=1, max_length=64)
+    render_as: str = Field(
+        default="auto",
+        min_length=1,
+        max_length=32,
+        description=(
+            "Trace Plotly compatível com os render_options do gráfico no catálogo "
+            "Telemetry. A API valida a combinação antes de renderizar."
+        ),
+    )
+
 
 mcp = FastMCP(
     name=settings.PROJECT_NAME,
@@ -77,9 +96,7 @@ def search_knowledge(
         logger.warning("mcp_tool_failed tool=search_knowledge reason=empty_query")
         raise ValueError("query não pode ser vazio")
     if not 1 <= limit <= settings.SEARCH_MAX_K:
-        raise ValueError(
-            f"limit deve estar entre 1 e {settings.SEARCH_MAX_K}"
-        )
+        raise ValueError(f"limit deve estar entre 1 e {settings.SEARCH_MAX_K}")
     started_at = perf_counter()
     result = search_qdrant(query.strip(), limit)
     logger.info(
@@ -95,9 +112,7 @@ def search_knowledge(
 def qdrant_status() -> dict[str, Any]:
     """Check whether the configured Qdrant collection is reachable."""
     result = get_qdrant_status()
-    DEPENDENCY_READY.labels("qdrant").set(
-        1 if result.get("connected") else 0
-    )
+    DEPENDENCY_READY.labels("qdrant").set(1 if result.get("connected") else 0)
     return result
 
 
@@ -106,9 +121,7 @@ def qdrant_status() -> dict[str, Any]:
 def postgres_status() -> dict[str, Any]:
     """Check whether the MIDAS read-only PostgreSQL connection is reachable."""
     result = get_postgres_status()
-    DEPENDENCY_READY.labels("postgresql").set(
-        1 if result.get("connected") else 0
-    )
+    DEPENDENCY_READY.labels("postgresql").set(1 if result.get("connected") else 0)
     return result
 
 
@@ -168,6 +181,83 @@ def get_consumption_summary(
 
 
 @mcp.tool()
+@instrument_tool("create_custom_dashboard")
+async def create_custom_dashboard(
+    title: Annotated[
+        str,
+        Field(min_length=1, max_length=120, description="Título curto do painel."),
+    ],
+    charts: Annotated[
+        list[CustomDashboardChartSelection],
+        Field(
+            min_length=1,
+            max_length=4,
+            description=(
+                "Selecione até quatro gráficos do catálogo e escolha o tipo Plotly "
+                "mais adequado dentre os render_options publicados para cada chart. "
+                "Há traces cartesianos, estatísticos, de distribuição, heatmap/contour, "
+                "superfície 3D, radar, hierarquia, pizza/donut e indicadores. "
+                "A API rejeita combinações incompatíveis. "
+                "Respeite o tipo pedido pelo usuário quando disponível; use auto sem "
+                "preferência explícita."
+            ),
+        ),
+    ],
+    ctx: Context,
+    period_days: Annotated[
+        int,
+        Field(
+            ge=1,
+            le=366,
+            description="Janela em dias aplicada aos gráficos temporais.",
+        ),
+    ] = 30,
+) -> dict[str, Any]:
+    """Compose a temporary dashboard from approved, user-scoped Ouros charts.
+
+    The user's farm or enterprise is taken from the authenticated request. This
+    tool does not accept IDs, SQL, or arbitrary chart definitions. The optional
+    period is bounded and applies only to charts backed by dated analytics.
+    It returns a dashboard payload with isolated Plotly HTML charts for the chat
+    client to render.
+    """
+    started_at = perf_counter()
+    user_type, _user_id = get_authenticated_identity()
+    request = getattr(ctx.request_context, "request", None)
+    headers = getattr(request, "headers", None)
+    telemetry_authorization = (
+        headers.get("x-ouros-telemetry-token") if headers is not None else None
+    )
+    scheme, _, telemetry_token = (telemetry_authorization or "").partition(" ")
+    if scheme.lower() != "bearer" or not telemetry_token.strip():
+        raise PermissionError("token delegado do Telemetry indisponível")
+    await verify_telemetry_access_token(telemetry_token.strip())
+    try:
+        result = await render_custom_dashboard(
+            title,
+            [chart.model_dump() for chart in charts],
+            period_days,
+            telemetry_token.strip(),
+        )
+    except (ValueError, DashboardServiceError) as exc:
+        logger.warning(
+            "mcp_tool_failed tool=create_custom_dashboard user_type=%s reason=%s",
+            user_type,
+            type(exc).__name__,
+        )
+        raise
+
+    logger.info(
+        "mcp_tool_completed tool=create_custom_dashboard user_type=%s "
+        "charts=%d duration_ms=%.1f",
+        user_type,
+        len(result["charts"]),
+        (perf_counter() - started_at) * 1000,
+    )
+    return result
+
+
+@mcp.tool()
 @instrument_tool("import_user_resource_records")
 def import_user_resource_records(
     request_id: str,
@@ -178,9 +268,7 @@ def import_user_resource_records(
     """Import historical records for the authenticated farm owner."""
     user_type, user_id = get_authenticated_identity()
     if user_type != FARM_OWNER_USER_TYPE:
-        raise PermissionError(
-            f"somente {FARM_OWNER_USER_TYPE} pode importar registros"
-        )
+        raise PermissionError(f"somente {FARM_OWNER_USER_TYPE} pode importar registros")
     return get_database_import_resource_records(
         user_type,
         user_id,

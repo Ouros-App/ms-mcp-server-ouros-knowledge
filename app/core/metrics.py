@@ -1,3 +1,4 @@
+import inspect
 import time
 from collections.abc import Callable
 from functools import wraps
@@ -46,8 +47,25 @@ def metric_path(path: str) -> str:
 
 
 def instrument_tool(name: str) -> Callable[[Callable[P, R]], Callable[P, R]]:
-    """Observe one synchronous FastMCP tool without changing its signature."""
+    """Observe one FastMCP tool without changing its signature."""
     def decorator(function: Callable[P, R]) -> Callable[P, R]:
+        if inspect.iscoroutinefunction(function):
+            @wraps(function)
+            async def async_wrapped(*args: P.args, **kwargs: P.kwargs) -> R:
+                started = time.perf_counter()
+                outcome = "error"
+                try:
+                    result = await function(*args, **kwargs)
+                    outcome = "success"
+                    return result
+                finally:
+                    TOOL_CALLS.labels(name, outcome).inc()
+                    TOOL_DURATION.labels(name).observe(
+                        time.perf_counter() - started
+                    )
+
+            return async_wrapped  # type: ignore[return-value]
+
         @wraps(function)
         def wrapped(*args: P.args, **kwargs: P.kwargs) -> R:
             started = time.perf_counter()
