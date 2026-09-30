@@ -46,8 +46,10 @@ def test_chart_selection_accepts_plotly_types_delegated_to_telemetry():
             {"chart_id": "monthly-consumption", "render_as": "histogram"},
             {"chart_id": "lot-throughput", "render_as": "scatter3d"},
             {"chart_id": "goal-status", "render_as": "treemap"},
-            {"chart_id": "monthly-consumption", "render_as": "surface"},
         ]
+    )
+    _validate_chart_selections(
+        [{"chart_id": "monthly-consumption", "render_as": "surface"}]
     )
     _validate_chart_selections(
         [{"chart_id": "monthly-consumption", "render_as": "future-plotly-trace"}]
