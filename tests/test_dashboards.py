@@ -31,7 +31,7 @@ VALID_PAYLOAD = {
         [],
         [{"chart_id": "unknown", "render_as": "auto"}],
         [VALID_CHART, VALID_CHART],
-        [{"chart_id": "goal-status", "render_as": "scatter"}],
+        [{"chart_id": "goal-status", "render_as": "not-a-plotly-type"}],
     ],
 )
 def test_chart_selection_rejects_invalid_values(charts):
@@ -39,11 +39,15 @@ def test_chart_selection_rejects_invalid_values(charts):
         _validate_chart_selections(charts)
 
 
-def test_chart_selection_accepts_supported_pie_and_histogram():
+def test_chart_selection_accepts_plotly_types_delegated_to_telemetry():
     _validate_chart_selections(
         [
             {"chart_id": "goal-status", "render_as": "pie"},
             {"chart_id": "monthly-consumption", "render_as": "histogram"},
+            {"chart_id": "lot-throughput", "render_as": "scatter3d"},
+            {"chart_id": "goal-status", "render_as": "treemap"},
+            {"chart_id": "monthly-consumption", "render_as": "surface"},
+            {"chart_id": "monthly-consumption", "render_as": "future-plotly-trace"},
         ]
     )
 
@@ -64,9 +68,13 @@ def test_chart_selection_accepts_supported_pie_and_histogram():
     ],
 )
 def test_decode_response_rejects_api_errors_and_malformed_payloads(status, body):
-    response = httpx.Response(status, json=body) if isinstance(body, dict) else httpx.Response(
-        status,
-        text=body if isinstance(body, str) else "",
+    response = (
+        httpx.Response(status, json=body)
+        if isinstance(body, dict)
+        else httpx.Response(
+            status,
+            text=body if isinstance(body, str) else "",
+        )
     )
     with pytest.raises(DashboardServiceError):
         _decode_response(response)
@@ -101,7 +109,9 @@ async def test_create_custom_dashboard_posts_delegated_request():
 
     transport = httpx.MockTransport(handler)
     with (
-        patch.object(settings, "TELEMETRY_DASHBOARD_API_URL", "https://telemetry.test/"),
+        patch.object(
+            settings, "TELEMETRY_DASHBOARD_API_URL", "https://telemetry.test/"
+        ),
         patch(
             "app.services.dashboards.httpx.AsyncClient",
             side_effect=lambda **kwargs: real_client(transport=transport, **kwargs),
@@ -140,7 +150,9 @@ async def test_create_custom_dashboard_rejects_invalid_request_before_http(
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize("failure", [httpx.ReadTimeout("slow"), httpx.ConnectError("offline")])
+@pytest.mark.parametrize(
+    "failure", [httpx.ReadTimeout("slow"), httpx.ConnectError("offline")]
+)
 async def test_create_custom_dashboard_maps_http_failures(failure):
     real_client = httpx.AsyncClient
     transport = httpx.MockTransport(lambda _request: (_ for _ in ()).throw(failure))

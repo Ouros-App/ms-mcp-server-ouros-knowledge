@@ -1,6 +1,6 @@
 import logging
 from time import perf_counter
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any
 
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.fastmcp import Context, FastMCP
@@ -43,15 +43,16 @@ class CustomDashboardChartSelection(BaseModel):
     """One approved chart and its requested visual form."""
 
     chart_id: str = Field(min_length=1, max_length=64)
-    render_as: Literal[
-        "auto",
-        "indicator",
-        "bar",
-        "line",
-        "pie",
-        "donut",
-        "histogram",
-    ] = "auto"
+    render_as: str = Field(
+        default="auto",
+        min_length=1,
+        max_length=32,
+        description=(
+            "Trace Plotly compatível com os render_options do gráfico no catálogo "
+            "Telemetry. A API valida a combinação antes de renderizar."
+        ),
+    )
+
 
 mcp = FastMCP(
     name=settings.PROJECT_NAME,
@@ -95,9 +96,7 @@ def search_knowledge(
         logger.warning("mcp_tool_failed tool=search_knowledge reason=empty_query")
         raise ValueError("query não pode ser vazio")
     if not 1 <= limit <= settings.SEARCH_MAX_K:
-        raise ValueError(
-            f"limit deve estar entre 1 e {settings.SEARCH_MAX_K}"
-        )
+        raise ValueError(f"limit deve estar entre 1 e {settings.SEARCH_MAX_K}")
     started_at = perf_counter()
     result = search_qdrant(query.strip(), limit)
     logger.info(
@@ -113,9 +112,7 @@ def search_knowledge(
 def qdrant_status() -> dict[str, Any]:
     """Check whether the configured Qdrant collection is reachable."""
     result = get_qdrant_status()
-    DEPENDENCY_READY.labels("qdrant").set(
-        1 if result.get("connected") else 0
-    )
+    DEPENDENCY_READY.labels("qdrant").set(1 if result.get("connected") else 0)
     return result
 
 
@@ -124,9 +121,7 @@ def qdrant_status() -> dict[str, Any]:
 def postgres_status() -> dict[str, Any]:
     """Check whether the MIDAS read-only PostgreSQL connection is reachable."""
     result = get_postgres_status()
-    DEPENDENCY_READY.labels("postgresql").set(
-        1 if result.get("connected") else 0
-    )
+    DEPENDENCY_READY.labels("postgresql").set(1 if result.get("connected") else 0)
     return result
 
 
@@ -198,14 +193,13 @@ async def create_custom_dashboard(
             min_length=1,
             max_length=4,
             description=(
-                "Selecione até quatro gráficos. Formatos compatíveis: current-flock "
-                "(indicator); capacity-utilization e mortality-rate (indicator ou "
-                "donut); farm-capacity e lot-throughput (bar, line ou histogram); "
-                "lot-mortality, lot-cost, monthly-consumption e resource-efficiency "
-                "(line/bar ou histogram); goal-status (pie, donut ou bar); goal-type "
-                "(bar ou line). Prefira o tipo visual pedido pelo usuário quando for "
-                "compatível. Histogramas representam a distribuição de valores "
-                "numéricos. Use auto quando não houver preferência."
+                "Selecione até quatro gráficos do catálogo e escolha o tipo Plotly "
+                "mais adequado dentre os render_options publicados para cada chart. "
+                "Há traces cartesianos, estatísticos, de distribuição, heatmap/contour, "
+                "superfície 3D, radar, hierarquia, pizza/donut e indicadores. "
+                "A API rejeita combinações incompatíveis. "
+                "Respeite o tipo pedido pelo usuário quando disponível; use auto sem "
+                "preferência explícita."
             ),
         ),
     ],
@@ -274,9 +268,7 @@ def import_user_resource_records(
     """Import historical records for the authenticated farm owner."""
     user_type, user_id = get_authenticated_identity()
     if user_type != FARM_OWNER_USER_TYPE:
-        raise PermissionError(
-            f"somente {FARM_OWNER_USER_TYPE} pode importar registros"
-        )
+        raise PermissionError(f"somente {FARM_OWNER_USER_TYPE} pode importar registros")
     return get_database_import_resource_records(
         user_type,
         user_id,

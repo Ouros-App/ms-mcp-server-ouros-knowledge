@@ -24,9 +24,6 @@ _ALLOWED_CHART_IDS = frozenset(
         "goal-type",
     }
 )
-_ALLOWED_RENDER_TYPES = frozenset(
-    {"auto", "indicator", "bar", "line", "pie", "donut", "histogram"}
-)
 
 
 class DashboardServiceError(RuntimeError):
@@ -46,8 +43,12 @@ def _validate_chart_selections(charts: list[dict[str, str]]) -> None:
     ]
     if unsupported:
         raise ValueError("charts contém gráficos não suportados")
-    if any(chart.get("render_as") not in _ALLOWED_RENDER_TYPES for chart in charts):
-        raise ValueError("charts contém um tipo de visualização não suportado")
+    if any(
+        not isinstance(chart.get("render_as"), str)
+        or not 1 <= len(chart["render_as"]) <= 32
+        for chart in charts
+    ):
+        raise ValueError("charts contém um tipo de visualização inválido")
 
 
 def _decode_response(response: httpx.Response) -> dict[str, Any]:
@@ -142,10 +143,8 @@ async def create_custom_dashboard(
         len(charts),
     )
     result = _decode_response(response)
-    if (
-        result.get("title") != title.strip()
-        or [chart.get("id") for chart in result["charts"]]
-        != [chart.get("chart_id") for chart in charts]
-    ):
+    if result.get("title") != title.strip() or [
+        chart.get("id") for chart in result["charts"]
+    ] != [chart.get("chart_id") for chart in charts]:
         raise DashboardServiceError("A API de dashboards retornou outro painel")
     return result
