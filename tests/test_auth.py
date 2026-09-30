@@ -9,10 +9,59 @@ from app.services.auth import (
     _identity_from_claims,
     _jwks_url,
     get_authenticated_identity,
+    verify_telemetry_access_token,
 )
 
 
 class AuthTests(unittest.IsolatedAsyncioTestCase):
+    async def test_telemetry_token_must_match_the_authenticated_mcp_identity(self) -> None:
+        claims = {
+            "sub": "keycloak-subject",
+            "azp": settings.MCP_JWT_AUTHORIZED_PARTY,
+            "database_id": 42,
+            "account_type": "farm_owner",
+            "farm_id": 7,
+            "enterprise_id": None,
+            "realm_access": {"roles": ["farm_owner"]},
+        }
+        mcp_token = SimpleNamespace(subject="keycloak-subject", claims=claims)
+        with (
+            patch("app.services.auth.get_access_token", return_value=mcp_token),
+            patch(
+                "app.services.auth._decode_token_for_audience",
+                return_value=claims,
+            ) as decode,
+        ):
+            await verify_telemetry_access_token("telemetry-token")
+
+        decode.assert_called_once_with(
+            "telemetry-token",
+            settings.TELEMETRY_JWT_AUDIENCE,
+        )
+
+        for invalid_claims in (
+            {**claims, "sub": "another-user"},
+            {**claims, "farm_id": 99},
+            {**claims, "azp": "another-client"},
+        ):
+            with (
+                self.subTest(invalid_claims=invalid_claims),
+                patch("app.services.auth.get_access_token", return_value=mcp_token),
+                patch(
+                    "app.services.auth._decode_token_for_audience",
+                    return_value=invalid_claims,
+                ),
+                self.assertRaises(PermissionError),
+            ):
+                await verify_telemetry_access_token("telemetry-token")
+
+    async def test_telemetry_token_requires_mcp_authentication(self) -> None:
+        with (
+            patch("app.services.auth.get_access_token", return_value=None),
+            self.assertRaises(PermissionError),
+        ):
+            await verify_telemetry_access_token("telemetry-token")
+
     def test_jwks_url_supports_explicit_and_derived_modes(self) -> None:
         """Resolve both explicit and issuer-derived JWKS URLs."""
         with (
