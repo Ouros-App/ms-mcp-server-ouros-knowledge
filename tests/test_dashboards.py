@@ -31,7 +31,7 @@ VALID_PAYLOAD = {
         [],
         [{"chart_id": "unknown", "render_as": "auto"}],
         [VALID_CHART, VALID_CHART],
-        [{"chart_id": "goal-status", "render_as": "not-a-plotly-type"}],
+        [{"chart_id": "goal-status", "render_as": ""}],
     ],
 )
 def test_chart_selection_rejects_invalid_values(charts):
@@ -47,8 +47,10 @@ def test_chart_selection_accepts_plotly_types_delegated_to_telemetry():
             {"chart_id": "lot-throughput", "render_as": "scatter3d"},
             {"chart_id": "goal-status", "render_as": "treemap"},
             {"chart_id": "monthly-consumption", "render_as": "surface"},
-            {"chart_id": "monthly-consumption", "render_as": "future-plotly-trace"},
         ]
+    )
+    _validate_chart_selections(
+        [{"chart_id": "monthly-consumption", "render_as": "future-plotly-trace"}]
     )
 
 
