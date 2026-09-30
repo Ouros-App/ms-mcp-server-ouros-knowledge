@@ -19,6 +19,8 @@ from app.services.dashboards import create_custom_dashboard as render_custom_das
 from app.services.database import (
     DEFAULT_CONSUMPTION_PERIOD_DAYS,
     MAX_CONSUMPTION_PERIOD_DAYS,
+)
+from app.services.database import (
     get_consumption_summary as get_database_consumption_summary,
 )
 from app.services.database import (
