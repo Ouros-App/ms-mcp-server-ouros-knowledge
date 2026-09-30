@@ -23,6 +23,15 @@ def test_tool_instrumentation_preserves_function_contract() -> None:
     assert add.__name__ == "add"
 
 
+def test_tool_instrumentation_awaits_async_tools() -> None:
+    @instrument_tool("async-example")
+    async def async_add(left: int, right: int = 1) -> int:
+        return left + right
+
+    assert asyncio.run(async_add(2, right=3)) == 5
+    assert async_add.__name__ == "async_add"
+
+
 def test_metrics_token_accepts_prometheus_authorized_party(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
