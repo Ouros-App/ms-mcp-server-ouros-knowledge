@@ -1,3 +1,5 @@
+from urllib.parse import urlsplit
+
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -35,6 +37,9 @@ class Settings(BaseSettings):
     MCP_JWT_AUTHORIZED_PARTY: str = "ms-ai-server-mcp-exchange"
     MCP_METRICS_KEYCLOAK_AUTHORIZED_PARTY: str = "ouros-prometheus"
     MCP_JWKS_URL: str | None = None
+    TELEMETRY_JWT_AUDIENCE: str = "ms-telemetry-dashboard-service"
+    TELEMETRY_DASHBOARD_API_URL: str | None = None
+    TELEMETRY_DASHBOARD_API_TIMEOUT_SECONDS: float = Field(default=20, gt=0, le=60)
 
     @field_validator(
         "QDRANT_API_KEY",
@@ -51,6 +56,30 @@ class Settings(BaseSettings):
             return None
         return value
 
+    @field_validator("TELEMETRY_DASHBOARD_API_URL")
+    @classmethod
+    def validate_telemetry_url(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        value = value.strip().rstrip("/")
+        parsed = urlsplit(value)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError("TELEMETRY_DASHBOARD_API_URL inválida")
+        if parsed.scheme != "https" and parsed.hostname not in {
+            "localhost",
+            "127.0.0.1",
+            "::1",
+        }:
+            raise ValueError("TELEMETRY_DASHBOARD_API_URL deve usar HTTPS")
+        return value
+
     @model_validator(mode="after")
     def validate_keycloak_jwt_config(self) -> "Settings":
         if self.SEARCH_MAX_K < self.SEARCH_TOP_K:
@@ -62,16 +91,17 @@ class Settings(BaseSettings):
         self.MCP_JWT_AUDIENCE = self.MCP_JWT_AUDIENCE.strip()
         self.MCP_JWT_AUTHORIZED_PARTY = self.MCP_JWT_AUTHORIZED_PARTY.strip()
         self.MCP_METRICS_KEYCLOAK_AUTHORIZED_PARTY = self.MCP_METRICS_KEYCLOAK_AUTHORIZED_PARTY.strip()
+        self.TELEMETRY_JWT_AUDIENCE = self.TELEMETRY_JWT_AUDIENCE.strip()
 
         if (
             not self.MCP_JWT_ISSUER
             or not self.MCP_JWT_AUDIENCE
             or not self.MCP_JWT_AUTHORIZED_PARTY
             or not self.MCP_METRICS_KEYCLOAK_AUTHORIZED_PARTY
+            or not self.TELEMETRY_JWT_AUDIENCE.strip()
         ):
             raise ValueError(
-                "MCP_JWT_ISSUER, MCP_JWT_AUDIENCE, MCP_JWT_AUTHORIZED_PARTY e "
-                "MCP_METRICS_KEYCLOAK_AUTHORIZED_PARTY são obrigatórios"
+                "issuer, audiences e authorized party do Keycloak são obrigatórios"
             )
         return self
 

@@ -1,10 +1,10 @@
 import logging
 from time import perf_counter
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from mcp.server.auth.settings import AuthSettings
-from mcp.server.fastmcp import FastMCP
-from pydantic import Field
+from mcp.server.fastmcp import Context, FastMCP
+from pydantic import BaseModel, Field
 
 from app.core.config import settings
 from app.core.identity import FARM_OWNER_USER_TYPE
@@ -12,10 +12,15 @@ from app.core.metrics import DEPENDENCY_READY, instrument_tool
 from app.services.auth import (
     KeycloakTokenVerifier,
     get_authenticated_identity,
+    verify_telemetry_access_token,
 )
 from app.services.database import (
     DEFAULT_CONSUMPTION_PERIOD_DAYS,
     MAX_CONSUMPTION_PERIOD_DAYS,
+)
+from app.services.dashboards import (
+    DashboardServiceError,
+    create_custom_dashboard as render_custom_dashboard,
 )
 from app.services.database import (
     get_consumption_summary as get_database_consumption_summary,
@@ -34,6 +39,21 @@ from app.services.knowledge import qdrant_status as get_qdrant_status
 from app.services.knowledge import search_knowledge as search_qdrant
 
 logger = logging.getLogger(__name__)
+
+
+class CustomDashboardChartSelection(BaseModel):
+    """One approved chart and its requested visual form."""
+
+    chart_id: str = Field(min_length=1, max_length=64)
+    render_as: Literal[
+        "auto",
+        "indicator",
+        "bar",
+        "line",
+        "pie",
+        "donut",
+        "histogram",
+    ] = "auto"
 
 mcp = FastMCP(
     name=settings.PROJECT_NAME,
@@ -162,6 +182,84 @@ def get_consumption_summary(
         user_type,
         period_days,
         len(result.get("summaries", [])),
+        (perf_counter() - started_at) * 1000,
+    )
+    return result
+
+
+@mcp.tool()
+@instrument_tool("create_custom_dashboard")
+async def create_custom_dashboard(
+    title: Annotated[
+        str,
+        Field(min_length=1, max_length=120, description="Título curto do painel."),
+    ],
+    charts: Annotated[
+        list[CustomDashboardChartSelection],
+        Field(
+            min_length=1,
+            max_length=4,
+            description=(
+                "Selecione até quatro gráficos. Formatos compatíveis: current-flock "
+                "(indicator); capacity-utilization e mortality-rate (indicator ou "
+                "donut); farm-capacity e lot-throughput (bar, line ou histogram); "
+                "lot-mortality, lot-cost, monthly-consumption e resource-efficiency "
+                "(line/bar ou histogram); goal-status (pie, donut ou bar); goal-type "
+                "(bar ou line). Prefira o tipo visual pedido pelo usuário quando for "
+                "compatível. Histogramas representam a distribuição de valores "
+                "numéricos. Use auto quando não houver preferência."
+            ),
+        ),
+    ],
+    ctx: Context,
+    period_days: Annotated[
+        int,
+        Field(
+            ge=1,
+            le=366,
+            description="Janela em dias aplicada aos gráficos temporais.",
+        ),
+    ] = 30,
+) -> dict[str, Any]:
+    """Compose a temporary dashboard from approved, user-scoped Ouros charts.
+
+    The user's farm or enterprise is taken from the authenticated request. This
+    tool does not accept IDs, SQL, or arbitrary chart definitions. The optional
+    period is bounded and applies only to charts backed by dated analytics.
+    It returns a dashboard payload with isolated Plotly HTML charts for the chat
+    client to render.
+    """
+    started_at = perf_counter()
+    user_type, _user_id = get_authenticated_identity()
+    request = getattr(ctx.request_context, "request", None)
+    headers = getattr(request, "headers", None)
+    telemetry_authorization = (
+        headers.get("x-ouros-telemetry-token") if headers is not None else None
+    )
+    scheme, _, telemetry_token = (telemetry_authorization or "").partition(" ")
+    if scheme.lower() != "bearer" or not telemetry_token.strip():
+        raise PermissionError("token delegado do Telemetry indisponível")
+    await verify_telemetry_access_token(telemetry_token.strip())
+    try:
+        result = await render_custom_dashboard(
+            title,
+            [chart.model_dump() for chart in charts],
+            period_days,
+            telemetry_token.strip(),
+        )
+    except (ValueError, DashboardServiceError) as exc:
+        logger.warning(
+            "mcp_tool_failed tool=create_custom_dashboard user_type=%s reason=%s",
+            user_type,
+            type(exc).__name__,
+        )
+        raise
+
+    logger.info(
+        "mcp_tool_completed tool=create_custom_dashboard user_type=%s "
+        "charts=%d duration_ms=%.1f",
+        user_type,
+        len(result["charts"]),
         (perf_counter() - started_at) * 1000,
     )
     return result
