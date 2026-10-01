@@ -16,6 +16,9 @@ from app.services.auth import (
 )
 from app.services.dashboards import DashboardServiceError
 from app.services.dashboards import create_custom_dashboard as render_custom_dashboard
+from app.services.dashboards import (
+    list_custom_dashboard_catalog as get_dashboard_catalog,
+)
 from app.services.database import (
     DEFAULT_CONSUMPTION_PERIOD_DAYS,
     MAX_CONSUMPTION_PERIOD_DAYS,
@@ -37,6 +40,20 @@ from app.services.knowledge import qdrant_status as get_qdrant_status
 from app.services.knowledge import search_knowledge as search_qdrant
 
 logger = logging.getLogger(__name__)
+
+
+async def _get_verified_telemetry_token(ctx: Context) -> tuple[str, str]:
+    """Return the authenticated user type and validated delegated token."""
+    user_type, _user_id = get_authenticated_identity()
+    request = getattr(ctx.request_context, "request", None)
+    headers = getattr(request, "headers", None)
+    authorization = headers.get("x-ouros-telemetry-token") if headers else None
+    scheme, _, token = (authorization or "").partition(" ")
+    if scheme.lower() != "bearer" or not token.strip():
+        raise PermissionError("token delegado do Telemetry indisponível")
+    token = token.strip()
+    await verify_telemetry_access_token(token)
+    return user_type, token
 
 
 class CustomDashboardChartSelection(BaseModel):
@@ -181,6 +198,36 @@ def get_consumption_summary(
 
 
 @mcp.tool()
+@instrument_tool("get_custom_dashboard_catalog")
+async def get_custom_dashboard_catalog(ctx: Context) -> dict[str, Any]:
+    """List authorized chart topics and compatible Plotly styles for this user.
+
+    Call this before creating a chart. Select charts from the returned titles and
+    descriptions; never ask the user to provide chart IDs or technical options.
+    """
+    started_at = perf_counter()
+    user_type, telemetry_token = await _get_verified_telemetry_token(ctx)
+    try:
+        catalog = await get_dashboard_catalog(telemetry_token)
+    except DashboardServiceError as exc:
+        logger.warning(
+            "mcp_tool_failed tool=get_custom_dashboard_catalog user_type=%s reason=%s",
+            user_type,
+            type(exc).__name__,
+        )
+        raise
+
+    logger.info(
+        "mcp_tool_completed tool=get_custom_dashboard_catalog user_type=%s "
+        "charts=%d duration_ms=%.1f",
+        user_type,
+        len(catalog["charts"]),
+        (perf_counter() - started_at) * 1000,
+    )
+    return catalog
+
+
+@mcp.tool()
 @instrument_tool("create_custom_dashboard")
 async def create_custom_dashboard(
     title: Annotated[
@@ -222,22 +269,13 @@ async def create_custom_dashboard(
     client to render.
     """
     started_at = perf_counter()
-    user_type, _user_id = get_authenticated_identity()
-    request = getattr(ctx.request_context, "request", None)
-    headers = getattr(request, "headers", None)
-    telemetry_authorization = (
-        headers.get("x-ouros-telemetry-token") if headers is not None else None
-    )
-    scheme, _, telemetry_token = (telemetry_authorization or "").partition(" ")
-    if scheme.lower() != "bearer" or not telemetry_token.strip():
-        raise PermissionError("token delegado do Telemetry indisponível")
-    await verify_telemetry_access_token(telemetry_token.strip())
+    user_type, telemetry_token = await _get_verified_telemetry_token(ctx)
     try:
         result = await render_custom_dashboard(
             title,
             [chart.model_dump() for chart in charts],
             period_days,
-            telemetry_token.strip(),
+            telemetry_token,
         )
     except (ValueError, DashboardServiceError) as exc:
         logger.warning(
