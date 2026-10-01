@@ -29,7 +29,7 @@ VALID_PAYLOAD = {
     "charts",
     [
         [],
-        [{"chart_id": "unknown", "render_as": "auto"}],
+        [{"chart_id": "INVALID_chart!", "render_as": "auto"}],
         [VALID_CHART, VALID_CHART],
         [{"chart_id": "goal-status", "render_as": ""}],
     ],
