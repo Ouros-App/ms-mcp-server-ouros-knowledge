@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.mcp_server import create_custom_dashboard
+from app.mcp_server import create_custom_dashboard, get_custom_dashboard_catalog
 from app.services.dashboards import DashboardServiceError
 
 
@@ -81,3 +81,54 @@ async def test_custom_dashboard_tool_propagates_auth_and_api_errors():
         pytest.raises(DashboardServiceError, match="upstream unavailable"),
     ):
         await create_custom_dashboard("Metas", [], context_with_token("good-jwt"))
+
+
+@pytest.mark.anyio
+async def test_dashboard_catalog_tool_verifies_and_forwards_delegated_token():
+    catalog = {"charts": [{"chart_id": "daily-water"}]}
+    with (
+        patch("app.mcp_server.get_authenticated_identity", return_value=("farm_owner", 42)),
+        patch("app.mcp_server.verify_telemetry_access_token", new=AsyncMock()) as verify,
+        patch("app.mcp_server.get_dashboard_catalog", new=AsyncMock(return_value=catalog)) as fetch,
+    ):
+        result = await get_custom_dashboard_catalog(context_with_token("catalog-jwt"))
+
+    assert result == catalog
+    verify.assert_awaited_once_with("catalog-jwt")
+    fetch.assert_awaited_once_with("catalog-jwt")
+
+
+@pytest.mark.anyio
+async def test_dashboard_catalog_tool_requires_delegated_bearer_token():
+    with (
+        patch("app.mcp_server.get_authenticated_identity", return_value=("farm_owner", 42)),
+        patch("app.mcp_server.verify_telemetry_access_token", new=AsyncMock()) as verify,
+        pytest.raises(PermissionError, match="token delegado"),
+    ):
+        await get_custom_dashboard_catalog(context_with_token(None))
+
+    verify.assert_not_awaited()
+
+
+@pytest.mark.anyio
+async def test_dashboard_catalog_tool_propagates_auth_and_api_errors():
+    with (
+        patch("app.mcp_server.get_authenticated_identity", return_value=("farm_owner", 42)),
+        patch(
+            "app.mcp_server.verify_telemetry_access_token",
+            new=AsyncMock(side_effect=PermissionError("invalid delegated token")),
+        ),
+        pytest.raises(PermissionError, match="invalid delegated token"),
+    ):
+        await get_custom_dashboard_catalog(context_with_token("bad-jwt"))
+
+    with (
+        patch("app.mcp_server.get_authenticated_identity", return_value=("farm_owner", 42)),
+        patch("app.mcp_server.verify_telemetry_access_token", new=AsyncMock()),
+        patch(
+            "app.mcp_server.get_dashboard_catalog",
+            new=AsyncMock(side_effect=DashboardServiceError("upstream unavailable")),
+        ),
+        pytest.raises(DashboardServiceError, match="upstream unavailable"),
+    ):
+        await get_custom_dashboard_catalog(context_with_token("good-jwt"))

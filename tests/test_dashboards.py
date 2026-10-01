@@ -9,6 +9,7 @@ from app.services.dashboards import (
     _decode_response,
     _validate_chart_selections,
     create_custom_dashboard,
+    list_custom_dashboard_catalog,
 )
 
 VALID_CHART = {"chart_id": "goal-status", "render_as": "pie"}
@@ -186,3 +187,180 @@ async def test_create_custom_dashboard_rejects_mismatched_response():
         pytest.raises(DashboardServiceError, match="outro painel"),
     ):
         await create_custom_dashboard("Metas", [VALID_CHART], 30, "jwt")
+
+
+def _catalog_client(handler):
+    real_client = httpx.AsyncClient
+    transport = httpx.MockTransport(handler)
+    return lambda **kwargs: real_client(transport=transport, **kwargs)
+
+
+@pytest.mark.anyio
+async def test_catalog_returns_flattened_user_scoped_charts():
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        if request.url.path == "/v1/user/dashboards":
+            return httpx.Response(200, json={"items": [{"id": "water", "title": "Água"}]})
+        return httpx.Response(
+            200,
+            json={"items": [{
+                "id": "daily-water",
+                "title": "Consumo diário",
+                "default_render_as": "scatter",
+                "render_options": ["scatter", "bar", "histogram"],
+            }]},
+        )
+
+    with (
+        patch.object(settings, "TELEMETRY_DASHBOARD_API_URL", "https://telemetry.test/"),
+        patch("app.services.dashboards.httpx.AsyncClient", side_effect=_catalog_client(handler)),
+    ):
+        result = await list_custom_dashboard_catalog("jwt")
+
+    assert result == {"charts": [{
+        "chart_id": "daily-water",
+        "title": "Consumo diário",
+        "dashboard": "Água",
+        "default_render_as": "scatter",
+        "render_options": ["scatter", "bar", "histogram"],
+    }]}
+    assert len(calls) == 2
+    assert all(call.headers["authorization"] == "Bearer jwt" for call in calls)
+
+
+@pytest.mark.anyio
+async def test_catalog_accepts_empty_dashboard_list():
+    with (
+        patch.object(settings, "TELEMETRY_DASHBOARD_API_URL", "https://telemetry.test"),
+        patch(
+            "app.services.dashboards.httpx.AsyncClient",
+            side_effect=_catalog_client(lambda _request: httpx.Response(200, json={"items": []})),
+        ),
+    ):
+        assert await list_custom_dashboard_catalog("jwt") == {"charts": []}
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("status", "message"),
+    [(401, "identidade"), (403, "identidade"), (503, "temporariamente indisponível"), (422, "rejeitou")],
+)
+async def test_catalog_maps_dashboard_list_http_errors(status, message):
+    with (
+        patch.object(settings, "TELEMETRY_DASHBOARD_API_URL", "https://telemetry.test"),
+        patch(
+            "app.services.dashboards.httpx.AsyncClient",
+            side_effect=_catalog_client(lambda _request: httpx.Response(status)),
+        ),
+        pytest.raises(DashboardServiceError, match=message),
+    ):
+        await list_custom_dashboard_catalog("jwt")
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "payload",
+    [
+        [], {"items": "bad"}, {"items": [None]},
+        {"items": [{"id": "INVALID!", "title": "Água"}]},
+        {"items": [{"id": "water", "title": " "}]},
+        {"items": [{"id": "water", "title": "Água"}] * 33},
+    ],
+)
+async def test_catalog_rejects_invalid_dashboard_payloads(payload):
+    with (
+        patch.object(settings, "TELEMETRY_DASHBOARD_API_URL", "https://telemetry.test"),
+        patch(
+            "app.services.dashboards.httpx.AsyncClient",
+            side_effect=_catalog_client(lambda _request: httpx.Response(200, json=payload)),
+        ),
+        pytest.raises(DashboardServiceError),
+    ):
+        await list_custom_dashboard_catalog("jwt")
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "charts",
+    [
+        "bad", [None],
+        [{"id": "INVALID!", "title": "Consumo", "default_render_as": "bar", "render_options": ["bar"]}],
+        [{"id": "water", "title": " ", "default_render_as": "bar", "render_options": ["bar"]}],
+        [{"id": "water", "title": "Consumo", "default_render_as": "bar", "render_options": []}],
+        [{"id": "water", "title": "Consumo", "default_render_as": "bar", "render_options": [None]}],
+        [{"id": "water", "title": "Consumo", "default_render_as": "bar", "render_options": ["bar"]}] * 65,
+    ],
+)
+async def test_catalog_rejects_invalid_chart_payloads(charts):
+    responses = iter([
+        httpx.Response(200, json={"items": [{"id": "water", "title": "Água"}]}),
+        httpx.Response(200, json={"items": charts}),
+    ])
+    with (
+        patch.object(settings, "TELEMETRY_DASHBOARD_API_URL", "https://telemetry.test"),
+        patch(
+            "app.services.dashboards.httpx.AsyncClient",
+            side_effect=_catalog_client(lambda _request: next(responses)),
+        ),
+        pytest.raises(DashboardServiceError),
+    ):
+        await list_custom_dashboard_catalog("jwt")
+
+
+@pytest.mark.anyio
+async def test_catalog_maps_chart_endpoint_http_error():
+    responses = iter([
+        httpx.Response(200, json={"items": [{"id": "water", "title": "Água"}]}),
+        httpx.Response(403),
+    ])
+    with (
+        patch.object(settings, "TELEMETRY_DASHBOARD_API_URL", "https://telemetry.test"),
+        patch(
+            "app.services.dashboards.httpx.AsyncClient",
+            side_effect=_catalog_client(lambda _request: next(responses)),
+        ),
+        pytest.raises(DashboardServiceError, match="identidade"),
+    ):
+        await list_custom_dashboard_catalog("jwt")
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("token", "base_url", "message"),
+    [("", "https://telemetry.test", "Token"), ("jwt", " ", "configurada")],
+)
+async def test_catalog_requires_token_and_configuration(token, base_url, message):
+    with (
+        patch.object(settings, "TELEMETRY_DASHBOARD_API_URL", base_url),
+        pytest.raises(DashboardServiceError, match=message),
+    ):
+        await list_custom_dashboard_catalog(token)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("failure", [httpx.ReadTimeout("slow"), httpx.ConnectError("offline")])
+async def test_catalog_maps_http_transport_failures(failure):
+    with (
+        patch.object(settings, "TELEMETRY_DASHBOARD_API_URL", "https://telemetry.test"),
+        patch(
+            "app.services.dashboards.httpx.AsyncClient",
+            side_effect=_catalog_client(lambda _request: (_ for _ in ()).throw(failure)),
+        ),
+        pytest.raises(DashboardServiceError),
+    ):
+        await list_custom_dashboard_catalog("jwt")
+
+
+@pytest.mark.anyio
+async def test_catalog_maps_invalid_json():
+    with (
+        patch.object(settings, "TELEMETRY_DASHBOARD_API_URL", "https://telemetry.test"),
+        patch(
+            "app.services.dashboards.httpx.AsyncClient",
+            side_effect=_catalog_client(lambda _request: httpx.Response(200, text="not-json")),
+        ),
+        pytest.raises(DashboardServiceError, match="dados inválidos"),
+    ):
+        await list_custom_dashboard_catalog("jwt")
