@@ -243,7 +243,6 @@ def get_user_context(user_type: UserType, user_id: int) -> dict[str, Any]:
                             f.area_property,
                             f.region,
                             f.poultry_capacity,
-                            f.place,
                             a.state,
                             a.city
                         FROM midas.farms AS f
@@ -292,7 +291,7 @@ def get_user_farm_data(
                 cursor.execute(
                     """
                         SELECT f.id, f.name, f.area_property, f.region,
-                               f.poultry_capacity, f.place, f.id_address,
+                               f.poultry_capacity, f.id_address,
                                f.id_enterprise, a.state, a.city
                         FROM midas.farms AS f
                         LEFT JOIN midas.addresses AS a ON a.id = f.id_address
@@ -444,7 +443,6 @@ def get_consumption_summary(
                     f.id AS id_farm,
                     f.name AS farm_name,
                     f.region,
-                    f.place,
                     a.state,
                     a.city,
                     COALESCE(w.water_records, 0) AS water_records,
