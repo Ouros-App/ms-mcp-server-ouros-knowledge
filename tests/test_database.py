@@ -175,6 +175,7 @@ class DatabaseGuardTests(unittest.TestCase):
         self.assertNotIn("user_id", result["profile"])
         self.assertNotIn("farm_id", result["profile"])
         self.assertNotIn("enterprise_id", result["profile"])
+        self.assertNotIn("f.place", " ".join(cursor.queries))
 
     @patch("app.services.database._connect")
     def test_user_context_scopes_employee_and_admin(self, connect) -> None:
@@ -217,6 +218,7 @@ class DatabaseGuardTests(unittest.TestCase):
 
         self.assertEqual(result["farm_ids"], [8])
         self.assertEqual(result["data"]["individual_goals"][0]["target_value"], 4.5)
+        self.assertNotIn("f.place", " ".join(cursor.queries))
 
         lots_query = next(
             query for query in cursor.queries if "FROM midas.lots" in query
@@ -276,6 +278,7 @@ class DatabaseGuardTests(unittest.TestCase):
         self.assertIn("LEFT JOIN water AS w", query)
         self.assertIn("LEFT JOIN energy AS e", query)
         self.assertNotIn("chickens_now", query)
+        self.assertNotIn("f.place", query)
 
     @patch("app.services.database._connect")
     def test_consumption_summary_for_admin_has_no_implicit_global_scope(self, connect) -> None:
