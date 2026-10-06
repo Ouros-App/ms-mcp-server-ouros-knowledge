@@ -185,7 +185,20 @@ def get_consumption_summary(
         user_type,
         period_days,
     )
-    result = get_database_consumption_summary(user_type, user_id, period_days)
+    try:
+        result = get_database_consumption_summary(user_type, user_id, period_days)
+    except Exception as error:
+        error_type = type(error).__name__
+        sqlstate = getattr(error, "sqlstate", None)
+        logger.exception(
+            "mcp_tool_failed tool=get_consumption_summary user_type=%s "
+            "period_days=%d error_type=%s sqlstate=%s",
+            user_type,
+            period_days,
+            error_type,
+            sqlstate,
+        )
+        raise
     logger.info(
         "mcp_tool_completed tool=get_consumption_summary user_type=%s "
         "period_days=%d summaries=%d duration_ms=%.1f",
